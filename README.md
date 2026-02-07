@@ -1,6 +1,8 @@
 Fork U – Weather Aware for Home Assistant 🌦️
 ============================================
 
+<img width="3776" height="1928" alt="merged_horizontal" src="https://github.com/user-attachments/assets/af0a654f-fec1-41b4-88a0-7b1987b2f728" />
+
 Fullscreen, anime‑style weather overlay that reacts to **real weather, air quality and lightning sensors** while staying gentle and readable over your dashboards.
 
 > ⚠️ Epilepsy / Photosensitivity warning  
