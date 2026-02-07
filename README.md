@@ -72,8 +72,8 @@ Configured via `spatial_mode` and the **Spatial awareness** panel in the card ed
 
 - **`background`** – overlay behind everything (`z-index: -1`).
 - **`bubble`** – *Bubble aware* mode:
-  - overlay sits **under Bubble card backdrops** (which use around `z-index: -5`),
-  - we use approx. `z-index: -3` so Bubble popups still stand out while keeping weather in the scene.
+  - overlay sits **under Bubble card backdrops** (which use around `z-index: 5`),
+  - we use approx. `z-index: 3` so Bubble popups still stand out while keeping weather in the scene.
 - **`gradient-mask`** – **Gradient mask** mode:
   - effects are drawn normally but then a radial mask cuts out the **central area** of the screen,
   - you get motion mostly in peripheral vision (around card edges), center stays calm.
