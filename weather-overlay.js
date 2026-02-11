@@ -563,11 +563,12 @@
       }
       
       if (this.type === 'hail') {
-        // Meteoroid-like fall: no wind sway, accelerating towards ground
+        // Meteoroid-like fall: no wind sway, accelerating towards ground.
+        // We don't have deltaMs here, so use a normalized step based on speed and hail factor.
         const hailFactor = getSpeedFactor('hail');
         const accel = 0.12 * hailFactor;
         this.speed += accel;
-        this.y += this.speed * (deltaMs / 16) * hailFactor;
+        this.y += this.speed * 0.9 * hailFactor;
         if (this.y > window.innerHeight + this.size * 2) {
           this.reset(config);
           this.y = -10;
