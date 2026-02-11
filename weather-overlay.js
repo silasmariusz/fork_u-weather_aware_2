@@ -453,13 +453,14 @@
       type: 'clouds'
     },
     'hail': {
-      maxParticles: 4,
-      color: 'rgba(242, 250, 255, 0.9)',
-      speedMin: 5,   // szybki start
-      speedMax: 9,   // bardzo gwałtowne uderzenia
-      sizeMin: 4,
-      sizeMax: 7,
-      swayAmount: 0, // bez wpływu wiatru
+      // Strong, clearly visible hail – dense, fast, big chunks
+      maxParticles: 24,
+      color: 'rgba(242, 250, 255, 0.95)',
+      speedMin: 7,   // very fast start
+      speedMax: 14,  // brutal impacts
+      sizeMin: 6,
+      sizeMax: 10,
+      swayAmount: 0, // no wind sway – straight meteors
       type: 'hail'
     },
     'exceptional': {
