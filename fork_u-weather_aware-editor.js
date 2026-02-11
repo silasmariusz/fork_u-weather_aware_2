@@ -36,6 +36,20 @@
     cloud_speed_multiplier: 1,
     wind_sway_factor: 0.7,
     spatial_mode: 'foreground',
+    // Effect toggles – allow disabling heavy effects
+    enable_rain: true,
+    enable_snow: true,
+    enable_clouds: true,
+    enable_fog: true,
+    enable_smog_effect: true,
+    enable_sun_glow: true,
+    enable_moon_glow: true,
+    enable_stars: true,
+    enable_hail: true,
+    enable_lightning_effect: true,
+    enable_matrix: true,
+    enable_window_droplets: true,
+    stars_require_moon: false,
     // Mobile performance options (mirrored into overlay config)
     mobile_limit_dpr: true,
     mobile_reduce_particles: true,
@@ -260,6 +274,19 @@
       set('lightning_distance_entity', cfg.lightning_distance_entity);
       set('cloud_speed_multiplier', cfg.cloud_speed_multiplier);
       set('wind_sway_factor', cfg.wind_sway_factor);
+      set('enable_rain', cfg.enable_rain);
+      set('enable_snow', cfg.enable_snow);
+      set('enable_clouds', cfg.enable_clouds);
+      set('enable_fog', cfg.enable_fog);
+      set('enable_smog_effect', cfg.enable_smog_effect);
+      set('enable_sun_glow', cfg.enable_sun_glow);
+      set('enable_moon_glow', cfg.enable_moon_glow);
+      set('enable_stars', cfg.enable_stars);
+      set('enable_hail', cfg.enable_hail);
+      set('enable_lightning_effect', cfg.enable_lightning_effect);
+      set('enable_matrix', cfg.enable_matrix);
+      set('enable_window_droplets', cfg.enable_window_droplets);
+      set('stars_require_moon', cfg.stars_require_moon);
       set('drizzle_precipitation_max', cfg.drizzle_precipitation_max);
       ['rain', 'snow', 'clouds', 'fog', 'smog', 'hail', 'lightning', 'stars', 'matrix'].forEach(k => set('speed_factor_' + k, cfg['speed_factor_' + k]));
       set('development_mode', cfg.development_mode);
@@ -472,6 +499,53 @@
               <label>Lightning</label><input type="number" id="speed_factor_lightning" value="${cfg.speed_factor_lightning ?? 1}" min="0.1" max="3" step="0.1" style="width:52px">
               <label>Stars</label><input type="number" id="speed_factor_stars" value="${cfg.speed_factor_stars ?? 1}" min="0.1" max="3" step="0.1" style="width:52px">
               <label>Matrix</label><input type="number" id="speed_factor_matrix" value="${cfg.speed_factor_matrix ?? 1}" min="0.1" max="3" step="0.1" style="width:52px">
+            </div>
+          </div>
+            </div>
+          </ha-expansion-panel>
+          <ha-expansion-panel outlined>
+            <h4 slot="header"><ha-icon icon="mdi:tune"></ha-icon> Effects enabled</h4>
+            <div class="content">
+          <div class="section">
+            <div class="section-title">Toggle individual effects (disable heavy ones if needed)</div>
+            <div class="form-row">
+              <label><input type="checkbox" id="enable_rain" ${cfg.enable_rain !== false ? 'checked' : ''}> Rain (rainy / pouring / lightning-rainy)</label>
+            </div>
+            <div class="form-row">
+              <label><input type="checkbox" id="enable_snow" ${cfg.enable_snow !== false ? 'checked' : ''}> Snow (snowy / snowy2 / snowy-rainy)</label>
+            </div>
+            <div class="form-row">
+              <label><input type="checkbox" id="enable_clouds" ${cfg.enable_clouds !== false ? 'checked' : ''}> Clouds</label>
+            </div>
+            <div class="form-row">
+              <label><input type="checkbox" id="enable_fog" ${cfg.enable_fog !== false ? 'checked' : ''}> Fog</label>
+            </div>
+            <div class="form-row">
+              <label><input type="checkbox" id="enable_smog_effect" ${cfg.enable_smog_effect !== false ? 'checked' : ''}> Smog alert fog</label>
+            </div>
+            <div class="form-row">
+              <label><input type="checkbox" id="enable_sun_glow" ${cfg.enable_sun_glow !== false ? 'checked' : ''}> Sun glow / beams</label>
+            </div>
+            <div class="form-row">
+              <label><input type="checkbox" id="enable_moon_glow" ${cfg.enable_moon_glow !== false ? 'checked' : ''}> Moon glow</label>
+            </div>
+            <div class="form-row">
+              <label><input type="checkbox" id="enable_stars" ${cfg.enable_stars !== false ? 'checked' : ''}> Stars</label>
+            </div>
+            <div class="form-row">
+              <label><input type="checkbox" id="stars_require_moon" ${cfg.stars_require_moon ? 'checked' : ''}> Stars require moon glow</label>
+            </div>
+            <div class="form-row">
+              <label><input type="checkbox" id="enable_hail" ${cfg.enable_hail !== false ? 'checked' : ''}> Hail (meteors)</label>
+            </div>
+            <div class="form-row">
+              <label><input type="checkbox" id="enable_lightning_effect" ${cfg.enable_lightning_effect !== false ? 'checked' : ''}> Lightning flashes</label>
+            </div>
+            <div class="form-row">
+              <label><input type="checkbox" id="enable_matrix" ${cfg.enable_matrix !== false ? 'checked' : ''}> Matrix / gaming overlay</label>
+            </div>
+            <div class="form-row">
+              <label><input type="checkbox" id="enable_window_droplets" ${cfg.enable_window_droplets !== false ? 'checked' : ''}> Window droplets (side rain on glass)</label>
             </div>
           </div>
             </div>
@@ -716,6 +790,19 @@
           speed_factor_lightning: parseFloat(root.getElementById('speed_factor_lightning')?.value || '1') || 1,
           speed_factor_stars: parseFloat(root.getElementById('speed_factor_stars')?.value || '1') || 1,
           speed_factor_matrix: parseFloat(root.getElementById('speed_factor_matrix')?.value || '1') || 1,
+          enable_rain: !!root.getElementById('enable_rain')?.checked,
+          enable_snow: !!root.getElementById('enable_snow')?.checked,
+          enable_clouds: !!root.getElementById('enable_clouds')?.checked,
+          enable_fog: !!root.getElementById('enable_fog')?.checked,
+          enable_smog_effect: !!root.getElementById('enable_smog_effect')?.checked,
+          enable_sun_glow: !!root.getElementById('enable_sun_glow')?.checked,
+          enable_moon_glow: !!root.getElementById('enable_moon_glow')?.checked,
+          enable_stars: !!root.getElementById('enable_stars')?.checked,
+          enable_hail: !!root.getElementById('enable_hail')?.checked,
+          enable_lightning_effect: !!root.getElementById('enable_lightning_effect')?.checked,
+          enable_matrix: !!root.getElementById('enable_matrix')?.checked,
+          enable_window_droplets: !!root.getElementById('enable_window_droplets')?.checked,
+          stars_require_moon: !!root.getElementById('stars_require_moon')?.checked,
           mobile_limit_dpr: !!root.getElementById('mobile_limit_dpr')?.checked,
           mobile_reduce_particles: !!root.getElementById('mobile_reduce_particles')?.checked,
           mobile_snowy2_light: !!root.getElementById('mobile_snowy2_light')?.checked,
@@ -741,7 +828,7 @@
         if (el) el.addEventListener('change', update);
       });
       // Checkboxes fire 'change' on toggle
-      ['enabled', 'development_mode', 'mobile_limit_dpr', 'mobile_reduce_particles', 'mobile_snowy2_light', 'mobile_smog_simple', 'mobile_30fps', 'gaming_matrix_only'].forEach(id => {
+      ['enabled', 'development_mode', 'mobile_limit_dpr', 'mobile_reduce_particles', 'mobile_snowy2_light', 'mobile_smog_simple', 'mobile_30fps', 'gaming_matrix_only', 'enable_rain', 'enable_snow', 'enable_clouds', 'enable_fog', 'enable_smog_effect', 'enable_sun_glow', 'enable_moon_glow', 'enable_stars', 'enable_hail', 'enable_lightning_effect', 'enable_matrix', 'enable_window_droplets', 'stars_require_moon'].forEach(id => {
         const el = root.getElementById(id);
         if (el) el.addEventListener('change', update);
       });

@@ -57,6 +57,20 @@
     speed_factor_matrix: 1,
     wind_sway_factor: 0.7,      // 0–2: how strongly wind bends rain/snow (default 0.7)
     spatial_mode: 'foreground', // 'background' | 'bubble' | 'gradient-mask' | 'foreground'
+    // Effect toggles – disable heavy effects if needed
+    enable_rain: true,
+    enable_snow: true,
+    enable_clouds: true,
+    enable_fog: true,
+    enable_smog_effect: true,
+    enable_sun_glow: true,
+    enable_moon_glow: true,
+    enable_stars: true,
+    enable_hail: true,
+    enable_lightning_effect: true,
+    enable_matrix: true,
+    enable_window_droplets: true,
+    stars_require_moon: false,
     // Mobile performance options (can be toggled in editor)
     mobile_limit_dpr: true,       // cap canvas DPR on phones (sharper vs performance)
     mobile_reduce_particles: true,// reduce particle counts on phones
@@ -877,19 +891,7 @@
 
     snowy2Ctx.clearRect(0, 0, W, H);
     for (const layer of snowy2Layers) {
-      // Skip bottom snow pile for snowy-rainy variant – only falling snow
-      if (currentWeather !== 'snowy-rainy') {
-        snowy2Ctx.beginPath();
-        snowy2Ctx.moveTo(0, layer.pileHeights[0]);
-        for (let i = 1; i < layer.NUM_SEG; i++)
-          snowy2Ctx.lineTo(i * layer.SEGMENT_WIDTH, layer.pileHeights[i]);
-        snowy2Ctx.lineTo(W, layer.pileHeights[layer.NUM_SEG - 1]);
-        snowy2Ctx.lineTo(W, H);
-        snowy2Ctx.lineTo(0, H);
-        snowy2Ctx.closePath();
-        snowy2Ctx.fillStyle = `rgba(255,255,255,${layer.layerProps.opacity})`;
-        snowy2Ctx.fill();
-      }
+      // No bottom snow pile – only falling snow layers
 
       for (const flake of layer.snowflakes) {
         const swayX = Math.sin(flake.swayOffset) * flake.swayAmp;
@@ -913,7 +915,7 @@
 
         const idx = Math.floor((flake.x + swayX + wx) / layer.SEGMENT_WIDTH);
         const pileY = idx >= 0 && idx < layer.NUM_SEG ? layer.pileHeights[idx] : H;
-        if (flake.y >= pileY - flake.size / 2) {
+        if (flake.y >= pileY - flake.size / 2 && currentWeather !== 'snowy-rainy') {
           if (idx >= 0 && idx < layer.NUM_SEG) {
             layer.pileHeights[idx] -= flake.size * 0.5;
             for (let s = 1; s <= 2; s++) {
@@ -1102,6 +1104,16 @@
     const config = weatherConfigs[weather];
     if (config && config.maxParticles > 0) {
       const cfg = getMobilePerfConfig();
+      const t = config.type;
+      if ((t === 'rain' || t === 'mixed') && !isEffectEnabled('enable_rain')) return;
+      if (t === 'snow' && !isEffectEnabled('enable_snow')) return;
+      if (t === 'clouds' && !isEffectEnabled('enable_clouds')) return;
+      if (t === 'fog' && !isEffectEnabled('enable_fog')) return;
+      if (t === 'hail' && !isEffectEnabled('enable_hail')) return;
+      if (t === 'stars') {
+        if (!isEffectEnabled('enable_stars')) return;
+        if (window.ForkUWeatherAwareConfig?.stars_require_moon && !isEffectEnabled('enable_moon_glow')) return;
+      }
       let count = config.maxParticles;
       if (config.type === 'clouds' || config.type === 'fog') {
         const cov = getCloudCoverage();
@@ -1451,15 +1463,16 @@
     const config = weatherConfigs[currentWeather];
     const matrixOnly = !!(cfg.gaming_matrix_only && isGamingModeActive());
     if (config && !matrixOnly) {
-      if (config.type === 'sunny') {
+      if (config.type === 'sunny' && isEffectEnabled('enable_sun_glow')) {
         drawSunnyGlow();
       }
-      if (config.type === 'sunny2') {
+      if (config.type === 'sunny2' && isEffectEnabled('enable_sun_glow')) {
         drawSunnyGlow();
         drawSunBeams();
       }
       // Moon glow for clear-night and snowy (majestic weather)
-      if (config.type === 'clear-night' || config.type === 'snowy' || config.type === 'snowy2') {
+      if (isEffectEnabled('enable_moon_glow') &&
+          (config.type === 'clear-night' || config.type === 'snowy' || config.type === 'snowy2')) {
         drawMoonGlow();
       }
 
@@ -1473,20 +1486,20 @@
       cachedPrecipMultiplier = getPrecipitationMultiplier();
       cachedCloudCoverage = getCloudCoverage();
       cachedWindData = getWindData();
-      if (config.type === 'snowy2') {
-        if (snowy2Canvas) {
-          snowy2Canvas.style.display = 'block';
-          updateSnowy2Effect(deltaMs);
-        }
-      } else {
-        if (snowy2Canvas && currentWeather !== 'snowy-rainy') snowy2Canvas.style.display = 'none';
+    if (config.type === 'snowy2') {
+      if (snowy2Canvas && isEffectEnabled('enable_snow')) {
+        snowy2Canvas.style.display = 'block';
+        updateSnowy2Effect(deltaMs);
+      }
+    } else {
+      if (snowy2Canvas && currentWeather !== 'snowy-rainy') snowy2Canvas.style.display = 'none';
         if (particles.length > 0) {
           particles.forEach(particle => {
             particle.update(config);
             particle.draw();
           });
         }
-        if (currentWeather === 'snowy-rainy' && snowy2Canvas) {
+      if (currentWeather === 'snowy-rainy' && snowy2Canvas && isEffectEnabled('enable_snow')) {
           snowy2Canvas.style.display = 'block';
           updateSnowy2Effect(deltaMs);
         }
@@ -1495,7 +1508,8 @@
     
     // Handle lightning – default 25–40 s; counter↑ triggers by distance; >30km rarer; min gap 20–40 s
     try {
-      if (!matrixOnly && config && (config.type === 'lightning' || config.hasLightning)) {
+      if (!matrixOnly && config && isEffectEnabled('enable_lightning_effect') &&
+          (config.type === 'lightning' || config.hasLightning)) {
         const ld = getLightningData();
         const hasSensors = ld.counter !== null || ld.distanceKm !== null;
         const distKm = ld.distanceKm;
@@ -1573,7 +1587,7 @@
     }
 
     // Gaming Mode: Matrix cyberpunk overlay – only when overlay enabled and gaming entity is explicitly 'on'
-    const gamingOn = isOverlayEnabled() && isGamingModeActive();
+    const gamingOn = isOverlayEnabled() && isGamingModeActive() && isEffectEnabled('enable_matrix');
     if (matrixCanvas) {
       if (gamingOn) {
         matrixCanvas.style.display = 'block';
@@ -1586,7 +1600,7 @@
     }
 
     // Smog Alert: fog rising from bottom (always on top, independent, pointer-events:none)
-    const smogOn = isSmogAlertActive();
+    const smogOn = isSmogAlertActive() && isEffectEnabled('enable_smog_effect');
     if (smogCanvas) {
       smogCanvas.style.display = smogOn ? 'block' : 'none';
       if (smogOn) updateSmogEffect(deltaMs);
@@ -1595,7 +1609,8 @@
 
     // Window droplets (rain-on-glass) – only during rain, on sides
     const rainStates = ['rainy', 'pouring', 'lightning-rainy', 'snowy-rainy'];
-    if (!matrixOnly && config && rainStates.includes(currentWeather) && ctx) {
+    if (!matrixOnly && config && rainStates.includes(currentWeather) &&
+        ctx && isEffectEnabled('enable_window_droplets')) {
       updateWindowDroplets(deltaMs);
     } else {
       windowDroplets = [];
@@ -1657,6 +1672,12 @@
     const v = cfg.wind_sway_factor;
     if (v == null || isNaN(parseFloat(v))) return 1;
     return Math.max(0, Math.min(2, parseFloat(v)));
+  }
+
+  function isEffectEnabled(key) {
+    const cfg = window.ForkUWeatherAwareConfig || {};
+    if (cfg[key] === false) return false;
+    return true;
   }
 
   function getSpatialMode() {
