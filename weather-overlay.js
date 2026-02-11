@@ -745,16 +745,27 @@
         ctx.globalAlpha = 1;
         
       } else if (this.type === 'hail') {
-        ctx.save();
-        ctx.translate(this.x, this.y);
-        ctx.rotate(this.rotation || 0);
-        const s = (this.size || 4) * 1.2;
+        // Bright, circular hailstones with icy gradient – very visible on both themes
         const theme = getThemeMode();
-        ctx.fillStyle = theme === 'light'
-          ? 'rgba(90, 110, 135, 0.9)'
-          : (weatherConfigs[currentWeather]?.color || 'rgba(242, 250, 255, 0.85)');
-        ctx.fillRect(-s / 2, -s / 2, s, s);
-        ctx.restore();
+        const r = (this.size || 6) * 1.2;
+        const cx = this.x;
+        const cy = this.y;
+        const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+        if (theme === 'light') {
+          grad.addColorStop(0, 'rgba(255,255,255,1)');
+          grad.addColorStop(0.3, 'rgba(245,250,255,1)');
+          grad.addColorStop(0.8, 'rgba(210,225,245,0.9)');
+          grad.addColorStop(1, 'rgba(180,200,230,0.7)');
+        } else {
+          grad.addColorStop(0, 'rgba(255,255,255,1)');
+          grad.addColorStop(0.3, 'rgba(245,250,255,0.95)');
+          grad.addColorStop(0.8, 'rgba(220,235,250,0.85)');
+          grad.addColorStop(1, 'rgba(190,210,235,0.6)');
+        }
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fill();
       } 
 
 
@@ -1120,7 +1131,7 @@
         const cov = getCloudCoverage();
         if (cov != null) count = Math.max(2, Math.round(count * (0.3 + cov / 100 * 0.7)));
       }
-      if (isMobileDevice() && cfg.mobile_reduce_particles) {
+      if (isMobileDevice() && cfg.mobile_reduce_particles && t !== 'hail') {
         count = Math.max(2, Math.round(count * 0.6));
       }
       for (let i = 0; i < count; i++) {
