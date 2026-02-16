@@ -907,6 +907,8 @@ function getStarsCount(isMobile) {
 }
 
 function createStarsEffect(ctx) {
+  const moonMult = ctx.effectOpacity?.moon ?? 1;
+  const starsMult = ctx.effectOpacity?.stars ?? 1;
   const group = new THREE.Group();
   const count = getStarsCount(ctx.isMobile);
   const positions = new Float32Array(count * 3);
@@ -938,8 +940,6 @@ function createStarsEffect(ctx) {
   points.frustumCulled = false;
   group.add(points);
 
-  const moonMult = ctx.effectOpacity?.moon ?? 1;
-  const starsMult = ctx.effectOpacity?.stars ?? 1;
   let moonMesh = null;
   if (moonPos && typeof moonPos.x === 'number' && typeof moonPos.y === 'number') {
     const mx = (moonPos.x - 0.5) * ctx.viewWidth;
