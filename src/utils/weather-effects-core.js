@@ -843,7 +843,7 @@ function createStarsEffect(ctx) {
         void main() {
           vec2 c = vUv - 0.5;
           float d = length(c) * 2.0;
-          float alpha = (1.0 - smoothstep(0.0, 1.0, d)) * uOpacity;
+          float alpha = exp(-d * d * 2.8) * uOpacity;
           gl_FragColor = vec4(0.96, 0.97, 1.0, alpha);
         }
       `,
