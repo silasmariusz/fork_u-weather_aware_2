@@ -48,5 +48,6 @@ jobs:
         with:
           default_author: github_actions
           message: "chore: rebuild bundle for HACS [skip ci]"
-          add: "fork_u-weather_aware.js workers/"
+          add: "fork_u-weather_aware.js"
           push: true
+          skip_dirty_check: true
