@@ -21,6 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -33,15 +35,21 @@ jobs:
       - name: Build for HACS
         run: npm run build:hacs
 
+      - name: Verify build output
+        run: |
+          test -f fork_u-weather_aware.js && head -c 200 fork_u-weather_aware.js
+          wc -c fork_u-weather_aware.js
+
       - name: Commit and push built files
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add fork_u-weather_aware.js
           git add workers/ 2>/dev/null || true
+          git status
           if git diff --staged --quiet; then
             echo "No build changes to commit"
           else
             git commit -m "chore: rebuild bundle [skip ci]"
-            git push
+            git push origin HEAD:main
           fi
