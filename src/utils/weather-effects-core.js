@@ -110,6 +110,7 @@ export class WeatherEffectsCore {
     this.snowSurfaces = [];
     this.smogOverlay = null;
     this.windowDropletsOverlay = null;
+    this.lightningOverlay = null;
     this.renderTarget = null;
     this.maskScene = null;
     this.maskCamera = null;
@@ -158,12 +159,17 @@ export class WeatherEffectsCore {
       this.lastAppliedExtras.matrixRainColor !== this.effectExtras.matrixRainColor ||
       this.lastAppliedExtras.smogActive !== this.effectExtras.smogActive ||
       this.lastAppliedExtras.windowDroplets !== this.effectExtras.windowDroplets ||
+      this.lastAppliedExtras.lightningOverlay !== this.effectExtras.lightningOverlay ||
+      this.lastAppliedExtras.cloudCoverage !== this.effectExtras.cloudCoverage ||
+      this.lastAppliedExtras.themeMode !== this.effectExtras.themeMode ||
+      this.lastAppliedExtras.cloudSpeedMultiplier !== this.effectExtras.cloudSpeedMultiplier ||
       moonChanged ||
       windChanged;
     if (this.currentEffect === effect && this.activeEffect && !extrasChanged) {
       this.activeEffect.setOpacity(this.opacity);
       this.updateSmogOverlay();
       this.updateWindowDropletsOverlay();
+      this.updateLightningOverlay();
       this.startLoop();
       return;
     }
@@ -173,6 +179,7 @@ export class WeatherEffectsCore {
   stop() {
     this.disposeSmogOverlay();
     this.disposeWindowDropletsOverlay();
+    this.disposeLightningOverlay();
     this.disposeActiveEffect();
     this.currentEffect = 'none';
     this.stopLoop();
@@ -215,6 +222,30 @@ export class WeatherEffectsCore {
     this.scene.remove(this.windowDropletsOverlay.group);
     this.windowDropletsOverlay.dispose();
     this.windowDropletsOverlay = null;
+  }
+
+  updateLightningOverlay() {
+    const active = this.currentEffect === 'rain_storm' && Boolean(this.effectExtras.lightningData);
+    if (active && !this.lightningOverlay) {
+      this.lightningOverlay = createLightningEffect({
+        viewWidth: this.viewWidth,
+        viewHeight: this.viewHeight,
+        opacity: this.opacity,
+        isMobile: this.isMobile,
+      });
+      this.scene.add(this.lightningOverlay.group);
+    } else if (!active && this.lightningOverlay) {
+      this.disposeLightningOverlay();
+    } else if (this.lightningOverlay) {
+      this.lightningOverlay.setOpacity(this.opacity);
+    }
+  }
+
+  disposeLightningOverlay() {
+    if (!this.lightningOverlay) return;
+    this.scene.remove(this.lightningOverlay.group);
+    this.lightningOverlay.dispose();
+    this.lightningOverlay = null;
   }
 
   setOpacity(opacity) {
@@ -284,9 +315,10 @@ export class WeatherEffectsCore {
     if (this.lastTimestamp === 0) this.lastTimestamp = timestamp;
     const delta = Math.min((timestamp - this.lastTimestamp) / 1000, 0.05);
     this.lastTimestamp = timestamp;
-    this.activeEffect?.update(delta, timestamp / 1000);
+    this.activeEffect?.update(delta, timestamp / 1000, this.effectExtras);
     this.smogOverlay?.update(delta);
     this.windowDropletsOverlay?.update(delta);
+    this.lightningOverlay?.update(delta, timestamp / 1000, this.effectExtras);
 
     const useGradientMask = this.effectExtras.spatialMode === 'gradient-mask';
     if (useGradientMask) {
@@ -363,6 +395,7 @@ export class WeatherEffectsCore {
     this.lastAppliedExtras = { ...this.effectExtras };
     this.updateSmogOverlay();
     this.updateWindowDropletsOverlay();
+    this.updateLightningOverlay();
     this.startLoop();
   }
 
@@ -391,6 +424,11 @@ export class WeatherEffectsCore {
       windSwayFactor: this.effectExtras.windSwayFactor,
       rainMaxTiltDeg: this.effectExtras.rainMaxTiltDeg,
       rainWindMinKmh: this.effectExtras.rainWindMinKmh,
+      sunPosition: this.effectExtras.sunPosition,
+      cloudCoverage: this.effectExtras.cloudCoverage,
+      precipitationMultiplier: this.effectExtras.precipitationMultiplier ?? 1,
+      themeMode: this.effectExtras.themeMode ?? 'dark',
+      cloudSpeedMultiplier: this.effectExtras.cloudSpeedMultiplier ?? 1,
     };
     if (effect === 'lightning') return createLightningEffect(ctx);
     if (effect === 'sun_beams') return createSunBeamEffect(ctx);
@@ -510,8 +548,9 @@ function createRainEffect(ctx) {
 
   return {
     group,
-    update(delta) {
-      uniforms.uTime.value += delta * preset.timeScale;
+    update(delta, _time, extras) {
+      const precipMult = extras?.precipitationMultiplier ?? 1;
+      uniforms.uTime.value += delta * preset.timeScale * precipMult;
       uniforms.uViewSize.value.set(ctx.viewWidth, ctx.viewHeight);
     },
     setOpacity(v) {
@@ -562,13 +601,15 @@ function createSnowEffect(ctx) {
   geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   const tex = createSnowflakeTexture();
   const baseOpacity = ctx.effect === 'snow_storm' ? 0.9 : 0.75;
+  const isLight = ctx.themeMode === 'light';
+  const snowColor = isLight ? 0xffffff : 0xe8f4ff;
   const mat = new THREE.PointsMaterial({
     map: tex,
     transparent: true,
     opacity: baseOpacity * (ctx.opacity / 100),
     sizeAttenuation: false,
     size: ctx.effect === 'snow_storm' ? 3.4 : 2.6,
-    color: 0xffffff,
+    color: snowColor,
     depthWrite: false,
     depthTest: false,
     blending: THREE.AdditiveBlending,
@@ -1046,6 +1087,17 @@ function createWindowDropletsOverlay(core) {
           dropCtx.beginPath();
           dropCtx.ellipse(d.x, d.y, d.size * 0.5, d.size * 1.1, 0, 0, Math.PI * 2);
           dropCtx.fill();
+          const hl = dropCtx.createRadialGradient(
+            d.x - d.size * 0.25, d.y - d.size * 0.4, 0,
+            d.x - d.size * 0.25, d.y - d.size * 0.4, d.size * 0.6
+          );
+          hl.addColorStop(0, `rgba(255,255,255,${0.6 * d.opacity})`);
+          hl.addColorStop(0.5, `rgba(255,255,255,${0.2 * d.opacity})`);
+          hl.addColorStop(1, 'rgba(255,255,255,0)');
+          dropCtx.fillStyle = hl;
+          dropCtx.beginPath();
+          dropCtx.ellipse(d.x - d.size * 0.2, d.y - d.size * 0.35, d.size * 0.35, d.size * 0.4, 0, 0, Math.PI * 2);
+          dropCtx.fill();
           dropCtx.restore();
         }
       }
@@ -1196,11 +1248,13 @@ const fogFragShader = `
 function createFogEffect(ctx) {
   const group = new THREE.Group();
   const settings = getFogSettings(ctx.effect, ctx.isMobile);
+  const cov = ctx.cloudCoverage;
+  const coverageMult = cov != null ? 0.6 + (cov / 100) * 0.5 : 1;
   const layers = settings.layers.map((lc) => {
     const geo = new THREE.PlaneGeometry(ctx.viewWidth, ctx.viewHeight);
     const uniforms = {
       uTime: { value: 0 },
-      uOpacity: { value: settings.baseOpacity * lc.intensity * (ctx.opacity / 100) },
+      uOpacity: { value: settings.baseOpacity * lc.intensity * (ctx.opacity / 100) * coverageMult },
       uScale: { value: lc.scale },
       uFlow: { value: lc.flow.clone() },
       uResolution: { value: new THREE.Vector2(ctx.viewWidth, ctx.viewHeight) },
@@ -1256,10 +1310,15 @@ function createFogEffect(ctx) {
 function createSunBeamEffect(ctx) {
   const group = new THREE.Group();
   let geo = new THREE.PlaneGeometry(ctx.viewWidth, ctx.viewHeight);
+  const sun = ctx.sunPosition || { azimuth: 180, elevation: 45, uvIndex: 3 };
+  const originX = Math.max(0, Math.min(1, (sun.azimuth - 90) / 180));
+  const originY = 0.08 + 0.35 * (1 - Math.min(90, Math.max(0, sun.elevation)) / 90);
   const uniforms = {
     uTime: { value: 0 },
     uOpacity: { value: ctx.opacity / 100 },
     uViewSize: { value: new THREE.Vector2(ctx.viewWidth, ctx.viewHeight) },
+    uOrigin: { value: new THREE.Vector2(originX, originY) },
+    uUvIndex: { value: sun.uvIndex },
   };
   const mat = new THREE.ShaderMaterial({
     uniforms,
@@ -1267,18 +1326,26 @@ function createSunBeamEffect(ctx) {
     fragmentShader: `
       varying vec3 vPosition;
       uniform vec2 uViewSize;
+      uniform vec2 uOrigin;
       uniform float uTime;
       uniform float uOpacity;
+      uniform float uUvIndex;
       void main() {
         vec2 uv = vec2((vPosition.x / uViewSize.x) + 0.5, (vPosition.y / uViewSize.y) + 0.5);
-        vec2 origin = vec2(1.1, 1.05);
-        vec2 dir = origin - uv;
+        vec2 dir = uOrigin - uv;
         float dist = length(dir);
         float angle = atan(dir.y, dir.x);
         float beams = sin(angle * 18.0 + uTime * 0.8) * 0.5 + 0.5;
         float intensity = smoothstep(0.6, 0.0, dist) * beams;
         float alpha = intensity * 0.65 * uOpacity;
-        vec3 color = mix(vec3(1.0, 0.95, 0.8), vec3(1.0, 0.85, 0.4), dist);
+        vec3 color;
+        if (uUvIndex >= 6.0) {
+          color = mix(vec3(1.0, 0.5, 0.15), vec3(1.0, 0.35, 0.1), dist);
+        } else if (uUvIndex >= 4.0) {
+          color = mix(vec3(1.0, 0.75, 0.35), vec3(1.0, 0.55, 0.2), dist);
+        } else {
+          color = mix(vec3(1.0, 0.95, 0.8), vec3(1.0, 0.85, 0.4), dist);
+        }
         gl_FragColor = vec4(color, alpha);
       }
     `,
@@ -1292,7 +1359,17 @@ function createSunBeamEffect(ctx) {
 
   return {
     group,
-    update(delta) { uniforms.uTime.value += delta; },
+    update(delta, _time, extras) {
+      uniforms.uTime.value += delta;
+      if (extras?.sunPosition) {
+        const s = extras.sunPosition;
+        uniforms.uOrigin.value.set(
+          Math.max(0, Math.min(1, (s.azimuth - 90) / 180)),
+          0.08 + 0.35 * (1 - Math.min(90, Math.max(0, s.elevation)) / 90)
+        );
+        uniforms.uUvIndex.value = s.uvIndex ?? 3;
+      }
+    },
     setOpacity(v) { uniforms.uOpacity.value = Math.max(0, Math.min(1, v / 100)); },
     onResize(w, h) {
       ctx.viewWidth = w;
@@ -1312,10 +1389,13 @@ function createSunBeamEffect(ctx) {
 function createCloudEffect(ctx) {
   const group = new THREE.Group();
   const heightRatio = 0.6;
+  const cov = ctx.cloudCoverage;
+  const coverageMult = cov != null ? 0.5 + (cov / 100) * 0.5 : 1;
+  const speedMult = ctx.cloudSpeedMultiplier ?? 1;
   let geo = new THREE.PlaneGeometry(ctx.viewWidth, ctx.viewHeight * heightRatio);
   const uniforms = {
     uTime: { value: 0 },
-    uOpacity: { value: ctx.opacity / 100 },
+    uOpacity: { value: (ctx.opacity / 100) * 0.24 * coverageMult },
     uViewSize: { value: new THREE.Vector2(ctx.viewWidth, ctx.viewHeight) },
     uScale: { value: ctx.isMobile ? 1.5 : 1.0 },
   };
@@ -1351,7 +1431,7 @@ function createCloudEffect(ctx) {
       cloud *= smoothstep(1.0, 0.8, vUv.y);
       float shadow = smoothstep(0.3, 0.6, fbm(uv * 2.0 + r + vec2(0.5)));
       vec3 color = mix(vec3(0.81, 0.82, 0.89), vec3(1.0), shadow * 0.8 + 0.2);
-      gl_FragColor = vec4(color, cloud * uOpacity * 0.24);
+      gl_FragColor = vec4(color, cloud * uOpacity);
     }
   `;
   const mat = new THREE.ShaderMaterial({
@@ -1369,7 +1449,7 @@ function createCloudEffect(ctx) {
 
   return {
     group,
-    update(delta) { uniforms.uTime.value += delta; },
+    update(delta) { uniforms.uTime.value += delta * speedMult; },
     setOpacity(v) { uniforms.uOpacity.value = Math.max(0, Math.min(1, v / 100)); },
     onResize(w, h, isMobile) {
       geo.dispose();
@@ -1451,9 +1531,12 @@ function createLightningEffect(ctx) {
   screenFlashMesh.renderOrder = 30;
   group.add(screenFlashMesh);
 
+  const LIGHTNING_COOLDOWN_S = 20;
   let lightningTimer = THREE.MathUtils.randFloat(1, 3);
   let flashTimer = 0;
   let flashDuration = 0.25;
+  let cooldownRemain = 0;
+  let scheduledFlashAt = -1;
   const normOp = Math.max(0, Math.min(1, ctx.opacity / 100));
 
   const trigger = () => {
@@ -1466,12 +1549,29 @@ function createLightningEffect(ctx) {
 
   return {
     group,
-    update(delta) {
-      lightningTimer -= delta;
-      if (lightningTimer <= 0) {
-        lightningTimer = THREE.MathUtils.randFloat(1.5, 4);
-        trigger();
+    update(delta, time, extras) {
+      const ld = extras?.lightningData;
+      const speedFac = (typeof extras?.speed_factor_lightning === 'number') ? extras.speed_factor_lightning : 1;
+
+      if (ld && (ld.strikesToTrigger > 0 || ld.distanceKm > 0)) {
+        if (ld.strikesToTrigger > 0 && cooldownRemain <= 0) {
+          const thunderDelay = ld.distanceKm * 3;
+          scheduledFlashAt = time + thunderDelay;
+          cooldownRemain = LIGHTNING_COOLDOWN_S;
+        }
+        if (scheduledFlashAt > 0 && time >= scheduledFlashAt) {
+          scheduledFlashAt = -1;
+          trigger();
+        }
+        cooldownRemain = Math.max(0, cooldownRemain - delta * speedFac);
+      } else {
+        lightningTimer -= delta * speedFac;
+        if (lightningTimer <= 0) {
+          lightningTimer = THREE.MathUtils.randFloat(1.5, 4);
+          trigger();
+        }
       }
+
       lightningUniforms.uTime.value += delta;
       if (flashTimer > 0) {
         flashTimer -= delta;

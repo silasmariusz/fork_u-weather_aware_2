@@ -232,6 +232,139 @@ function getMoonPosition() {
 
 const BEARING_MAP = { N: 0, NE: 45, E: 90, SE: 135, S: 180, SW: 225, W: 270, NW: 315 };
 
+let lastLightningCount = -1;
+
+function getLightningData() {
+  const cfg = window.ForkUWeatherAwareConfig || {};
+  const ha = getHomeAssistant();
+  let count = 0;
+  let distanceKm = 0;
+
+  if (cfg.development_mode && (cfg.debug_lightning_counter != null || cfg.debug_lightning_distance != null)) {
+    count = cfg.debug_lightning_counter != null && cfg.debug_lightning_counter !== ''
+      ? parseInt(cfg.debug_lightning_counter, 10) || 0
+      : (lastLightningCount >= 0 ? lastLightningCount : 0);
+    distanceKm = cfg.debug_lightning_distance != null && cfg.debug_lightning_distance !== ''
+      ? parseFloat(cfg.debug_lightning_distance) || 0
+      : 5;
+    if (cfg.debug_lightning_counter != null && cfg.debug_lightning_counter !== '') {
+      lastLightningCount = count;
+    }
+  } else if (ha?.hass?.states) {
+    const counterId = cfg.lightning_counter_entity;
+    const distId = cfg.lightning_distance_entity;
+    if (counterId) {
+      const e = ha.hass.states[counterId];
+      if (e?.state !== 'unavailable' && e?.state !== 'unknown') {
+        const v = parseInt(e.state, 10);
+        if (!isNaN(v)) count = v;
+      }
+    }
+    if (distId) {
+      const e = ha.hass.states[distId];
+      if (e?.state !== 'unavailable' && e?.state !== 'unknown') {
+        const v = parseFloat(e.state);
+        if (!isNaN(v) && v >= 0) distanceKm = v;
+      }
+    }
+    if (lastLightningCount < 0) lastLightningCount = count;
+  }
+
+  const strikesToTrigger = count > lastLightningCount ? Math.min(count - lastLightningCount, 5) : 0;
+  if (strikesToTrigger > 0) lastLightningCount = count;
+
+  return { count, distanceKm, strikesToTrigger };
+}
+
+function getCloudCoverage() {
+  const cfg = window.ForkUWeatherAwareConfig || {};
+  const ha = getHomeAssistant();
+  const WEATHER_ENTITY = getWeatherEntityId();
+  if (cfg.development_mode && cfg.debug_cloud_coverage != null && String(cfg.debug_cloud_coverage).trim() !== '') {
+    const v = parseFloat(cfg.debug_cloud_coverage);
+    if (!isNaN(v)) return Math.max(0, Math.min(100, v));
+  }
+  if (!ha?.hass) return null;
+  if (cfg.cloud_coverage_entity) {
+    const e = ha.hass.states[cfg.cloud_coverage_entity];
+    if (e?.state && e.state !== 'unavailable' && e.state !== 'unknown') {
+      const v = parseFloat(e.state);
+      if (!isNaN(v)) return Math.max(0, Math.min(100, v));
+    }
+  }
+  const we = ha.hass.states[WEATHER_ENTITY];
+  if (we?.attributes?.cloud_coverage != null) {
+    const v = parseFloat(we.attributes.cloud_coverage);
+    if (!isNaN(v)) return Math.max(0, Math.min(100, v));
+  }
+  return null;
+}
+
+function getPrecipitationMultiplier() {
+  const cfg = window.ForkUWeatherAwareConfig || {};
+  const ha = getHomeAssistant();
+  const WEATHER_ENTITY = getWeatherEntityId();
+  if (cfg.development_mode && cfg.debug_precipitation && cfg.debug_precipitation !== 'Use sensors') {
+    const m = { light: 0.35, medium: 0.65, heavy: 1.2 }[cfg.debug_precipitation];
+    if (m !== undefined) return m;
+  }
+  if (!ha?.hass) return 1;
+  if (cfg.precipitation_entity) {
+    const e = ha.hass.states[cfg.precipitation_entity];
+    if (e?.state !== 'unavailable' && e?.state !== 'unknown') {
+      const v = parseFloat(e.state);
+      if (!isNaN(v)) return Math.max(0.2, Math.min(1.5, 0.2 + (v / 10)));
+    }
+  }
+  const we = ha.hass.states[WEATHER_ENTITY];
+  if (!we?.attributes) return 1;
+  const precip = we.attributes.precipitation ?? we.attributes.precipitation_1h ?? we.attributes.precipitation_probability;
+  if (precip == null) return 1;
+  const v = parseFloat(precip);
+  if (isNaN(v)) return 1;
+  return Math.max(0.2, Math.min(1.5, 0.2 + (v / 10)));
+}
+
+function getThemeMode() {
+  const cfg = window.ForkUWeatherAwareConfig || {};
+  if (cfg.theme_mode === 'dark' || cfg.theme_mode === 'light') return cfg.theme_mode;
+  const root = document.documentElement;
+  if (root?.classList && (root.classList.contains('dark') || root.getAttribute('theme') === 'dark')) return 'dark';
+  if (root?.classList?.contains('light')) return 'light';
+  if (typeof window.matchMedia !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
+  return 'light';
+}
+
+function getSunPosition() {
+  const cfg = window.ForkUWeatherAwareConfig || {};
+  const ha = getHomeAssistant();
+  const SUN_ENTITY = cfg.sun_entity || 'sun.sun';
+  let azimuth = 180;
+  let elevation = 45;
+  let uvIndex = 3;
+
+  if (ha?.hass?.states) {
+    const sun = ha.hass.states[SUN_ENTITY];
+    if (sun?.attributes) {
+      const a = sun.attributes;
+      azimuth = parseFloat(a.azimuth) || 180;
+      elevation = parseFloat(a.elevation) || 45;
+    }
+    if (cfg.uv_index_entity) {
+      const uv = ha.hass.states[cfg.uv_index_entity];
+      if (uv?.state !== 'unavailable' && uv?.state !== 'unknown') {
+        const v = parseFloat(uv.state);
+        if (!isNaN(v) && v >= 0) uvIndex = v;
+      }
+    } else {
+      const we = ha.hass.states[getWeatherEntityId()];
+      if (we?.attributes?.uv_index != null) uvIndex = parseFloat(we.attributes.uv_index) || 3;
+    }
+  }
+
+  return { azimuth, elevation, uvIndex };
+}
+
 function getWindData() {
   const cfg = window.ForkUWeatherAwareConfig || {};
   const WEATHER_ENTITY = getWeatherEntityId();
@@ -368,13 +501,22 @@ function updateWeather() {
   const windowDroplets = rainEffects.includes(effect) && isEffectEnabled('enable_window_droplets');
   const spatialMode = (window.ForkUWeatherAwareConfig || {}).spatial_mode || 'foreground';
   const { speed: windSpeedKmh, bearing: windBearing } = getWindData();
-  const cfg = window.ForkUWeatherAwareConfig || {};
   const windSwayFactor = (cfg.wind_sway_factor != null && !isNaN(parseFloat(cfg.wind_sway_factor)))
     ? Math.max(0, Math.min(2, parseFloat(cfg.wind_sway_factor))) : 0.7;
   const rainMaxTiltDeg = (cfg.rain_max_tilt_deg != null && !isNaN(parseFloat(cfg.rain_max_tilt_deg)))
     ? parseFloat(cfg.rain_max_tilt_deg) : 30;
   const rainWindMinKmh = (cfg.rain_wind_min_kmh != null && !isNaN(parseFloat(cfg.rain_wind_min_kmh)))
     ? parseFloat(cfg.rain_wind_min_kmh) : 3;
+  const lightningData = (effect === 'lightning' || effect === 'rain_storm') ? getLightningData() : null;
+  const lightningOverlay = effect === 'rain_storm' ? lightningData : null;
+  const sunPosition = effect === 'sun_beams' ? getSunPosition() : null;
+  const speedFactorLightning = (cfg.speed_factor_lightning != null && !isNaN(parseFloat(cfg.speed_factor_lightning)))
+    ? parseFloat(cfg.speed_factor_lightning) : 1;
+  const cloudCoverage = getCloudCoverage();
+  const precipitationMultiplier = getPrecipitationMultiplier();
+  const themeMode = getThemeMode();
+  const cloudSpeedMult = (cfg.cloud_speed_multiplier != null && !isNaN(parseFloat(cfg.cloud_speed_multiplier)))
+    ? Math.max(0.1, Math.min(3, parseFloat(cfg.cloud_speed_multiplier))) : 1;
   if (engine) {
     engine.start(effect, 100, {
       smogActive,
@@ -386,6 +528,14 @@ function updateWeather() {
       windSwayFactor,
       rainMaxTiltDeg,
       rainWindMinKmh,
+      lightningData,
+      lightningOverlay,
+      sunPosition,
+      speed_factor_lightning: speedFactorLightning,
+      cloudCoverage,
+      precipitationMultiplier,
+      themeMode,
+      cloudSpeedMultiplier: cloudSpeedMult,
     });
   }
 }
@@ -444,6 +594,8 @@ function init() {
       ? parseFloat(initCfg.rain_max_tilt_deg) : 30;
     const rainWindMinKmh = (initCfg.rain_wind_min_kmh != null && !isNaN(parseFloat(initCfg.rain_wind_min_kmh)))
       ? parseFloat(initCfg.rain_wind_min_kmh) : 3;
+    const initLightning = (effect === 'lightning' || effect === 'rain_storm') ? getLightningData() : null;
+    const initSun = effect === 'sun_beams' ? getSunPosition() : null;
     engine.start(effect, 100, {
       smogActive,
       moonPosition,
@@ -454,6 +606,14 @@ function init() {
       windSwayFactor,
       rainMaxTiltDeg,
       rainWindMinKmh,
+      lightningData: initLightning,
+      lightningOverlay: effect === 'rain_storm' ? initLightning : null,
+      sunPosition: initSun,
+      speed_factor_lightning: (initCfg.speed_factor_lightning != null && !isNaN(parseFloat(initCfg.speed_factor_lightning))) ? parseFloat(initCfg.speed_factor_lightning) : 1,
+      cloudCoverage: getCloudCoverage(),
+      precipitationMultiplier: getPrecipitationMultiplier(),
+      themeMode: getThemeMode(),
+      cloudSpeedMultiplier: (initCfg.cloud_speed_multiplier != null && !isNaN(parseFloat(initCfg.cloud_speed_multiplier))) ? Math.max(0.1, Math.min(3, parseFloat(initCfg.cloud_speed_multiplier))) : 1,
     });
   }
   } catch (err) {

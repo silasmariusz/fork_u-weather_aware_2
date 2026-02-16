@@ -89,8 +89,10 @@
       }
       if (hass?.themes?.darkMode !== undefined) {
         const cfg = window.ForkUWeatherAwareConfig || {};
+        const override = cfg.theme_mode;
+        const fromHA = hass.themes.darkMode ? 'dark' : 'light';
         window.ForkUWeatherAwareConfig = Object.assign({}, cfg, {
-          theme_mode: hass.themes.darkMode ? 'dark' : 'light'
+          theme_mode: (override === 'light' || override === 'dark') ? override : fromHA
         });
       }
     }
@@ -225,7 +227,7 @@
         { id: 'pm25_entity', domains: ['sensor'] },
         { id: 'pm4_entity', domains: ['sensor'] },
         { id: 'pm10_entity', domains: ['sensor'] },
-        { id: 'gaming_mode_entity', domains: ['input_boolean'] },
+        { id: 'gaming_mode_entity', domains: ['input_boolean', 'binary_sensor'] },
         { id: 'lightning_counter_entity', domains: ['sensor'] },
         { id: 'lightning_distance_entity', domains: ['sensor'] }
       ];
@@ -274,6 +276,8 @@
       set('lightning_distance_entity', cfg.lightning_distance_entity);
       set('cloud_speed_multiplier', cfg.cloud_speed_multiplier);
       set('wind_sway_factor', cfg.wind_sway_factor);
+      set('rain_max_tilt_deg', cfg.rain_max_tilt_deg);
+      set('rain_wind_min_kmh', cfg.rain_wind_min_kmh);
       set('enable_rain', cfg.enable_rain);
       set('enable_snow', cfg.enable_snow);
       set('enable_clouds', cfg.enable_clouds);
@@ -303,6 +307,7 @@
       set('mobile_30fps', cfg.mobile_30fps);
       set('gaming_matrix_only', cfg.gaming_matrix_only);
       set('snowy_variant', cfg.snowy_variant || 'snowy2');
+      set('theme_mode', cfg.theme_mode || '');
       set('spatial_mode', cfg.spatial_mode || 'foreground');
       const testVal = (cfg.test_effect || 'Use Real Weather');
       root.querySelectorAll('input[name="test_effect"]').forEach(inp => { inp.checked = inp.value === testVal; });
@@ -332,7 +337,7 @@
       const weatherOpts = getEntityOptions(hass, ['weather'], cfg.weather_entity);
       const sunOpts = getEntityOptions(hass, ['sun'], cfg.sun_entity);
       const sensorOpts = (val) => getEntityOptions(hass, ['sensor'], val);
-      const inputBooleanOpts = getEntityOptions(hass, ['input_boolean'], cfg.gaming_mode_entity);
+      const gamingModeOpts = getEntityOptions(hass, ['input_boolean', 'binary_sensor'], cfg.gaming_mode_entity);
       this.shadowRoot.innerHTML = `
         <style>
           :host { display: block; }
@@ -481,6 +486,12 @@
               <label>Wind sway factor</label>
               <input type="number" id="wind_sway_factor" value="${cfg.wind_sway_factor ?? 0.7}" min="0" max="2" step="0.1" style="width:72px" title="How strongly wind bends rain/snow (0 = off, 0.7 = default)">
             </div>
+            <div class="form-row">
+              <label>Rain max tilt (°)</label>
+              <input type="number" id="rain_max_tilt_deg" value="${cfg.rain_max_tilt_deg ?? 30}" min="0" max="60" step="5" style="width:72px" title="Max rain/snow tilt from wind (default 30)">
+              <label>Rain wind min (km/h)</label>
+              <input type="number" id="rain_wind_min_kmh" value="${cfg.rain_wind_min_kmh ?? 3}" min="0" max="20" step="1" style="width:72px" title="Min wind speed to tilt rain (default 3)">
+            </div>
           </div>
             </div>
           </ha-expansion-panel>
@@ -556,6 +567,14 @@
           <div class="section">
             <div class="section-title">Spatial awareness (where effects are drawn)</div>
             <div class="form-row">
+              <label>Theme</label>
+              <select id="theme_mode" title="Override light/dark for snow/effects; null = auto from HA theme">
+                <option value="" ${!cfg.theme_mode ? 'selected' : ''}>Auto (from HA theme)</option>
+                <option value="light" ${cfg.theme_mode === 'light' ? 'selected' : ''}>Light</option>
+                <option value="dark" ${cfg.theme_mode === 'dark' ? 'selected' : ''}>Dark</option>
+              </select>
+            </div>
+            <div class="form-row">
               <label>Mode</label>
               <select id="spatial_mode" class="entity-select">
                 <option value="background" ${cfg.spatial_mode === 'background' ? 'selected' : ''}>Background (behind all cards, z-index -1)</option>
@@ -626,7 +645,7 @@
               <label>Gaming mode</label>
               <input id="gaming_mode_entity" type="text" class="entity-select" list="gaming_mode_entity_list" value="${cfg.gaming_mode_entity || ''}" placeholder="input_boolean.gaming_mode">
               <datalist id="gaming_mode_entity_list">
-                ${inputBooleanOpts.map(o => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join('')}
+                ${gamingModeOpts.map(o => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join('')}
               </datalist>
             </div>
             <div class="form-row">
@@ -781,6 +800,8 @@
           cloud_speed_multiplier: parseFloat(root.getElementById('cloud_speed_multiplier')?.value || '1') || 1,
           drizzle_precipitation_max: parseFloat(root.getElementById('drizzle_precipitation_max')?.value || '2.5') || 2.5,
           wind_sway_factor: parseFloat(root.getElementById('wind_sway_factor')?.value || '0.7') || 0.7,
+          rain_max_tilt_deg: parseFloat(root.getElementById('rain_max_tilt_deg')?.value || '30') || 30,
+          rain_wind_min_kmh: parseFloat(root.getElementById('rain_wind_min_kmh')?.value || '3') || 3,
           speed_factor_rain: parseFloat(root.getElementById('speed_factor_rain')?.value || '1') || 1,
           speed_factor_snow: parseFloat(root.getElementById('speed_factor_snow')?.value || '1') || 1,
           speed_factor_clouds: parseFloat(root.getElementById('speed_factor_clouds')?.value || '1') || 1,
@@ -810,6 +831,7 @@
           mobile_30fps: !!root.getElementById('mobile_30fps')?.checked,
           gaming_matrix_only: !!root.getElementById('gaming_matrix_only')?.checked,
           snowy_variant: root.getElementById('snowy_variant')?.value || 'snowy2',
+          theme_mode: root.getElementById('theme_mode')?.value || null,
           spatial_mode: root.getElementById('spatial_mode')?.value || 'foreground',
           development_mode: root.getElementById('development_mode').checked,
           test_effect: (root.querySelector('input[name="test_effect"]:checked') || {}).value || 'Use Real Weather'
@@ -822,7 +844,7 @@
       };
 
       // Use 'change' for text inputs to avoid cursor jumping (config-changed triggers re-render)
-      const textIds = ['weather_entity', 'sun_entity', 'moon_phase_entity', 'uv_index_entity', 'moon_position_entity', 'moon_azimuth_entity', 'moon_altitude_entity', 'moon_distance_entity', 'gaming_mode_entity', 'pm25_entity', 'pm4_entity', 'pm10_entity', 'smog_threshold_pm25', 'smog_threshold_pm4', 'smog_threshold_pm10', 'cloud_coverage_entity', 'wind_speed_entity', 'wind_direction_entity', 'precipitation_entity', 'lightning_counter_entity', 'lightning_distance_entity', 'debug_precipitation', 'debug_wind_speed', 'debug_wind_direction', 'debug_lightning_distance', 'debug_lightning_counter', 'debug_cloud_coverage', 'cloud_speed_multiplier', 'drizzle_precipitation_max', 'wind_sway_factor', 'speed_factor_rain', 'speed_factor_snow', 'speed_factor_clouds', 'speed_factor_fog', 'speed_factor_smog', 'speed_factor_hail', 'speed_factor_lightning', 'speed_factor_stars', 'speed_factor_matrix', 'snowy_variant', 'spatial_mode'];
+      const textIds = ['weather_entity', 'sun_entity', 'theme_mode', 'moon_phase_entity', 'uv_index_entity', 'moon_position_entity', 'moon_azimuth_entity', 'moon_altitude_entity', 'moon_distance_entity', 'gaming_mode_entity', 'pm25_entity', 'pm4_entity', 'pm10_entity', 'smog_threshold_pm25', 'smog_threshold_pm4', 'smog_threshold_pm10', 'cloud_coverage_entity', 'wind_speed_entity', 'wind_direction_entity', 'precipitation_entity', 'lightning_counter_entity', 'lightning_distance_entity', 'debug_precipitation', 'debug_wind_speed', 'debug_wind_direction', 'debug_lightning_distance', 'debug_lightning_counter', 'debug_cloud_coverage', 'cloud_speed_multiplier', 'drizzle_precipitation_max', 'wind_sway_factor', 'rain_max_tilt_deg', 'rain_wind_min_kmh', 'speed_factor_rain', 'speed_factor_snow', 'speed_factor_clouds', 'speed_factor_fog', 'speed_factor_smog', 'speed_factor_hail', 'speed_factor_lightning', 'speed_factor_stars', 'speed_factor_matrix', 'snowy_variant', 'spatial_mode'];
       textIds.forEach(id => {
         const el = root.getElementById(id);
         if (el) el.addEventListener('change', update);

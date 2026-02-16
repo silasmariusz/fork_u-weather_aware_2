@@ -67,6 +67,7 @@ const DEFAULT_OVERLAY_CONFIG = {
   mobile_smog_simple: false,
   mobile_30fps: false,
   gaming_matrix_only: false,
+  snowy_variant: 'snowy2',
 };
 
 window.ForkUWeatherAwareConfig = Object.assign(
