@@ -830,10 +830,11 @@ function createStarsEffect(ctx) {
   if (moonPos && typeof moonPos.x === 'number' && typeof moonPos.y === 'number') {
     const mx = (moonPos.x - 0.5) * ctx.viewWidth;
     const my = (0.5 - moonPos.y) * ctx.viewHeight;
-    const moonGeo = new THREE.PlaneGeometry(ctx.viewWidth * 0.38, ctx.viewHeight * 0.30);
+    const moonSize = Math.max(ctx.viewWidth, ctx.viewHeight) * 0.45;
+    const moonGeo = new THREE.PlaneGeometry(moonSize, moonSize);
     const moonMat = new THREE.ShaderMaterial({
       uniforms: {
-        uOpacity: { value: 0.32 * (ctx.opacity / 100) },
+        uOpacity: { value: 0.22 * (ctx.opacity / 100) },
       },
       vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
       fragmentShader: `
@@ -841,9 +842,9 @@ function createStarsEffect(ctx) {
         uniform float uOpacity;
         void main() {
           vec2 c = vUv - 0.5;
-          float d = length(c);
-          float alpha = smoothstep(0.95, 0.15, d) * uOpacity;
-          gl_FragColor = vec4(0.95, 0.96, 1.0, alpha);
+          float d = length(c) * 2.0;
+          float alpha = (1.0 - smoothstep(0.0, 1.0, d)) * uOpacity;
+          gl_FragColor = vec4(0.96, 0.97, 1.0, alpha);
         }
       `,
       transparent: true,
