@@ -7,6 +7,7 @@ on:
     paths:
       - 'src/**'
       - 'fork_u-weather_aware-editor.js'
+      - '.github/workflows/build.yaml'
       - 'package.json'
       - 'package-lock.json'
       - 'vite.config.js'
@@ -28,7 +29,7 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Build for HACS
         run: npm run build:hacs
