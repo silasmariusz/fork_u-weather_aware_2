@@ -230,9 +230,70 @@ function getMoonPosition() {
   }
 }
 
+const BEARING_MAP = { N: 0, NE: 45, E: 90, SE: 135, S: 180, SW: 225, W: 270, NW: 315 };
+
+function getWindData() {
+  const cfg = window.ForkUWeatherAwareConfig || {};
+  const WEATHER_ENTITY = getWeatherEntityId();
+  if (cfg.development_mode && (cfg.debug_wind_speed || cfg.debug_wind_direction)) {
+    let spd = 5;
+    if (cfg.debug_wind_speed && cfg.debug_wind_speed !== 'Use sensors') {
+      spd = { none: 0, light: 10, medium: 25, strong: 45 }[cfg.debug_wind_speed] ?? 5;
+    } else {
+      const ha = getHomeAssistant();
+      if (ha?.hass && cfg.wind_speed_entity) {
+        const e = ha.hass.states[cfg.wind_speed_entity];
+        if (e?.state !== 'unavailable') spd = parseFloat(e.state) || 5;
+      }
+    }
+    let brg = 270;
+    if (cfg.debug_wind_direction && cfg.debug_wind_direction !== 'Use sensors') {
+      const d = cfg.debug_wind_direction;
+      brg = BEARING_MAP[d] ?? parseFloat(d) || 270;
+    } else {
+      const ha = getHomeAssistant();
+      if (ha?.hass && cfg.wind_direction_entity) {
+        const e = ha.hass.states[cfg.wind_direction_entity];
+        if (e?.state !== 'unavailable') brg = parseFloat(e.state) || 270;
+      }
+    }
+    return { speed: spd, bearing: brg };
+  }
+  const ha = getHomeAssistant();
+  if (!ha?.hass) return { speed: 5, bearing: 270 };
+  let speed = 5;
+  let bearing = 270;
+  if (cfg.wind_speed_entity) {
+    const e = ha.hass.states[cfg.wind_speed_entity];
+    if (e?.state !== 'unavailable' && e?.state !== 'unknown') {
+      const v = parseFloat(e.state);
+      if (!isNaN(v)) speed = v;
+    }
+  }
+  if (speed === 5) {
+    const we = ha.hass.states[WEATHER_ENTITY];
+    const v = we?.attributes?.wind_speed != null ? parseFloat(we.attributes.wind_speed) : NaN;
+    if (!isNaN(v)) speed = v;
+  }
+  if (cfg.wind_direction_entity) {
+    const e = ha.hass.states[cfg.wind_direction_entity];
+    if (e?.state !== 'unavailable' && e?.state !== 'unknown') {
+      const v = parseFloat(e.state);
+      if (!isNaN(v)) bearing = v;
+      else if (typeof e.state === 'string' && BEARING_MAP[e.state] != null) bearing = BEARING_MAP[e.state];
+    }
+  }
+  if (bearing === 270) {
+    const we = ha.hass.states[WEATHER_ENTITY];
+    const v = we?.attributes?.wind_bearing != null ? parseFloat(we.attributes.wind_bearing) : NaN;
+    if (!isNaN(v)) bearing = v;
+  }
+  return { speed, bearing };
+}
+
 function getSpatialZIndex() {
   const mode = (window.ForkUWeatherAwareConfig || {}).spatial_mode || 'foreground';
-  const z = { foreground: 9998, background: 1, bubble: 5000, 'gradient-mask': 9997 }[mode];
+  const z = { foreground: 9998, background: -1, bubble: 3, 'gradient-mask': 9997 }[mode];
   return z ?? 9998;
 }
 
@@ -306,8 +367,26 @@ function updateWeather() {
   const rainEffects = ['rain', 'rain_storm', 'rain_drizzle', 'snow_storm'];
   const windowDroplets = rainEffects.includes(effect) && isEffectEnabled('enable_window_droplets');
   const spatialMode = (window.ForkUWeatherAwareConfig || {}).spatial_mode || 'foreground';
+  const { speed: windSpeedKmh, bearing: windBearing } = getWindData();
+  const cfg = window.ForkUWeatherAwareConfig || {};
+  const windSwayFactor = (cfg.wind_sway_factor != null && !isNaN(parseFloat(cfg.wind_sway_factor)))
+    ? Math.max(0, Math.min(2, parseFloat(cfg.wind_sway_factor))) : 0.7;
+  const rainMaxTiltDeg = (cfg.rain_max_tilt_deg != null && !isNaN(parseFloat(cfg.rain_max_tilt_deg)))
+    ? parseFloat(cfg.rain_max_tilt_deg) : 30;
+  const rainWindMinKmh = (cfg.rain_wind_min_kmh != null && !isNaN(parseFloat(cfg.rain_wind_min_kmh)))
+    ? parseFloat(cfg.rain_wind_min_kmh) : 3;
   if (engine) {
-    engine.start(effect, 100, { smogActive, moonPosition, windowDroplets, spatialMode });
+    engine.start(effect, 100, {
+      smogActive,
+      moonPosition,
+      windowDroplets,
+      spatialMode,
+      windBearing,
+      windSpeedKmh,
+      windSwayFactor,
+      rainMaxTiltDeg,
+      rainWindMinKmh,
+    });
   }
 }
 
@@ -357,7 +436,25 @@ function init() {
     const rainEffects = ['rain', 'rain_storm', 'rain_drizzle', 'snow_storm'];
     const windowDroplets = rainEffects.includes(effect) && isEffectEnabled('enable_window_droplets');
     const spatialMode = (window.ForkUWeatherAwareConfig || {}).spatial_mode || 'foreground';
-    engine.start(effect, 100, { smogActive, moonPosition, windowDroplets, spatialMode });
+    const { speed: windSpeedKmh, bearing: windBearing } = getWindData();
+    const initCfg = window.ForkUWeatherAwareConfig || {};
+    const windSwayFactor = (initCfg.wind_sway_factor != null && !isNaN(parseFloat(initCfg.wind_sway_factor)))
+      ? Math.max(0, Math.min(2, parseFloat(initCfg.wind_sway_factor))) : 0.7;
+    const rainMaxTiltDeg = (initCfg.rain_max_tilt_deg != null && !isNaN(parseFloat(initCfg.rain_max_tilt_deg)))
+      ? parseFloat(initCfg.rain_max_tilt_deg) : 30;
+    const rainWindMinKmh = (initCfg.rain_wind_min_kmh != null && !isNaN(parseFloat(initCfg.rain_wind_min_kmh)))
+      ? parseFloat(initCfg.rain_wind_min_kmh) : 3;
+    engine.start(effect, 100, {
+      smogActive,
+      moonPosition,
+      windowDroplets,
+      spatialMode,
+      windBearing,
+      windSpeedKmh,
+      windSwayFactor,
+      rainMaxTiltDeg,
+      rainWindMinKmh,
+    });
   }
   } catch (err) {
     error('Weather overlay init failed:', err);

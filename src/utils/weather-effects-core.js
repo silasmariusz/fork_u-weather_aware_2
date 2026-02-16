@@ -150,12 +150,16 @@ export class WeatherEffectsCore {
     const mp = this.effectExtras.moonPosition;
     const lmp = this.lastAppliedExtras.moonPosition;
     const moonChanged = (mp?.x !== lmp?.x) || (mp?.y !== lmp?.y);
+    const windChanged =
+      this.lastAppliedExtras.windBearing !== this.effectExtras.windBearing ||
+      this.lastAppliedExtras.windSpeedKmh !== this.effectExtras.windSpeedKmh;
     const extrasChanged =
       this.lastAppliedExtras.snowAccumulation !== this.effectExtras.snowAccumulation ||
       this.lastAppliedExtras.matrixRainColor !== this.effectExtras.matrixRainColor ||
       this.lastAppliedExtras.smogActive !== this.effectExtras.smogActive ||
       this.lastAppliedExtras.windowDroplets !== this.effectExtras.windowDroplets ||
-      moonChanged;
+      moonChanged ||
+      windChanged;
     if (this.currentEffect === effect && this.activeEffect && !extrasChanged) {
       this.activeEffect.setOpacity(this.opacity);
       this.updateSmogOverlay();
@@ -382,6 +386,11 @@ export class WeatherEffectsCore {
       snowSurfaces: this.snowSurfaces,
       matrixRainColor: this.effectExtras.matrixRainColor,
       moonPosition: this.effectExtras.moonPosition,
+      windBearing: this.effectExtras.windBearing,
+      windSpeedKmh: this.effectExtras.windSpeedKmh,
+      windSwayFactor: this.effectExtras.windSwayFactor,
+      rainMaxTiltDeg: this.effectExtras.rainMaxTiltDeg,
+      rainWindMinKmh: this.effectExtras.rainWindMinKmh,
     };
     if (effect === 'lightning') return createLightningEffect(ctx);
     if (effect === 'sun_beams') return createSunBeamEffect(ctx);
@@ -442,10 +451,21 @@ function createRainEffect(ctx) {
   rainGeo.setAttribute('instanceSway', new THREE.InstancedBufferAttribute(sway, 1));
   rainGeo.setAttribute('instancePhase', new THREE.InstancedBufferAttribute(phases, 1));
 
+  const windMin = ctx.rainWindMinKmh ?? 3;
+  const swayFactor = ctx.windSwayFactor ?? 0.7;
+  const windSpeed = ctx.windSpeedKmh ?? 5;
+  const bearingRad = ((ctx.windBearing ?? 270) * Math.PI) / 180;
+  let windSway = 0;
+  if (windSpeed >= windMin) {
+    windSway = -Math.sin(bearingRad) * windSpeed * 0.06 * swayFactor;
+  }
+  const windSwayNorm = windSway * 0.15;
+
   const uniforms = {
     uTime: { value: 0 },
     uOpacity: { value: ctx.opacity / 100 },
     uViewSize: { value: new THREE.Vector2(ctx.viewWidth, ctx.viewHeight) },
+    uWindSway: { value: windSwayNorm },
   };
 
   const rainMaterial = new THREE.ShaderMaterial({
@@ -458,13 +478,14 @@ function createRainEffect(ctx) {
       attribute float instancePhase;
       uniform float uTime;
       uniform vec2 uViewSize;
+      uniform float uWindSway;
       varying float vAlpha;
       void main() {
         float progress = fract(uTime * instanceSpeed + instancePhase);
         float travel = (uViewSize.y * 0.5) - progress * (uViewSize.y + 20.0);
         vec3 transformed = position;
         transformed.y *= instanceLength;
-        transformed.x += instanceOffset.x + sin(progress * 6.28318 + instancePhase) * instanceSway;
+        transformed.x += instanceOffset.x + sin(progress * 6.28318 + instancePhase) * instanceSway + uWindSway * progress * uViewSize.y;
         transformed.y += travel + instanceOffset.y;
         transformed.z += -5.0 + instanceOffset.z;
         vAlpha = 1.0 - progress;
@@ -519,12 +540,20 @@ function createSnowEffect(ctx) {
   const positions = new Float32Array(count * 3);
   const velocities = new Float32Array(count * 3);
 
+  const windMin = ctx.rainWindMinKmh ?? 3;
+  const swayFactor = ctx.windSwayFactor ?? 0.7;
+  const windSpeed = ctx.windSpeedKmh ?? 5;
+  const bearingRad = ((ctx.windBearing ?? 270) * Math.PI) / 180;
+  const windBiasX = windSpeed >= windMin
+    ? -Math.sin(bearingRad) * windSpeed * 0.06 * swayFactor * 0.8
+    : 0;
+
   for (let i = 0; i < count; i++) {
     const i3 = i * 3;
     positions[i3] = THREE.MathUtils.randFloatSpread(ctx.viewWidth + 30);
     positions[i3 + 1] = THREE.MathUtils.randFloatSpread(ctx.viewHeight + 30);
     positions[i3 + 2] = Math.random() * 4 - 2;
-    velocities[i3] = THREE.MathUtils.randFloat(-0.2, 0.2);
+    velocities[i3] = THREE.MathUtils.randFloat(-0.2, 0.2) + windBiasX;
     velocities[i3 + 1] = ctx.effect === 'snow_storm' ? THREE.MathUtils.randFloat(-1.4, -0.9) : THREE.MathUtils.randFloat(-0.8, -0.4);
     velocities[i3 + 2] = THREE.MathUtils.randFloat(-0.05, 0.05);
   }
@@ -598,7 +627,15 @@ function createSnowy2Effect(ctx) {
   const flakesPerLayer = Math.floor(totalFlakes / SNOWY2_LAYERS.length);
   const tex = createSnowflakeTexture();
 
-  const layerData = SNOWY2_LAYERS.map((lp) => {
+    const windMin = ctx.rainWindMinKmh ?? 3;
+    const swayFactor = ctx.windSwayFactor ?? 0.7;
+    const windSpeed = ctx.windSpeedKmh ?? 5;
+    const bearingRad = ((ctx.windBearing ?? 270) * Math.PI) / 180;
+    const windBiasX = windSpeed >= windMin
+      ? -Math.sin(bearingRad) * windSpeed * 0.06 * swayFactor * 0.12
+      : 0;
+
+    const layerData = SNOWY2_LAYERS.map((lp) => {
     const positions = new Float32Array(flakesPerLayer * 3);
     const fallSpeeds = new Float32Array(flakesPerLayer);
     const swayAmps = new Float32Array(flakesPerLayer);
@@ -647,7 +684,7 @@ function createSnowy2Effect(ctx) {
           const i3 = i * 3;
           ld.swayOffsets[i] += ld.swaySpeeds[i];
           const swayX = Math.sin(ld.swayOffsets[i]) * ld.swayAmps[i] * 0.08;
-          verts[i3] += swayX * d;
+          verts[i3] += (swayX + windBiasX) * d;
           verts[i3 + 1] -= ld.fallSpeeds[i] * d;
           const halfW = ctx.viewWidth / 2 + 15;
           const halfH = ctx.viewHeight / 2 + 15;
@@ -830,7 +867,7 @@ function createStarsEffect(ctx) {
   if (moonPos && typeof moonPos.x === 'number' && typeof moonPos.y === 'number') {
     const mx = (moonPos.x - 0.5) * ctx.viewWidth;
     const my = (0.5 - moonPos.y) * ctx.viewHeight;
-    const moonSize = Math.max(ctx.viewWidth, ctx.viewHeight) * 0.45;
+    const moonSize = Math.max(ctx.viewWidth, ctx.viewHeight) * 0.35;
     const moonGeo = new THREE.PlaneGeometry(moonSize, moonSize);
     const moonMat = new THREE.ShaderMaterial({
       uniforms: {
@@ -1065,10 +1102,10 @@ function createSmogOverlay(core) {
         vec2 aspect = vec2(uResolution.x / max(uResolution.y, 0.0001), 1.0);
         vec2 uv = (vUv - 0.5) * aspect + 0.5;
         uv *= uScale;
-        uv += vec2(0.02, -0.04) * uTime;
+        uv += vec2(0.015, 0.06) * uTime;
         float d = fbm(uv);
         d = smoothstep(0.2, 0.65, d);
-        float vMask = smoothstep(0.0, 0.55, vUv.y);
+        float vMask = smoothstep(0.85, 0.25, vUv.y);
         vec3 color = vec3(0.55, 0.52, 0.48);
         gl_FragColor = vec4(color, d * vMask * uOpacity);
       }

@@ -559,7 +559,7 @@
               <label>Mode</label>
               <select id="spatial_mode" class="entity-select">
                 <option value="background" ${cfg.spatial_mode === 'background' ? 'selected' : ''}>Background (behind all cards, z-index -1)</option>
-                <option value="bubble" ${cfg.spatial_mode === 'bubble' ? 'selected' : ''}>Bubble aware (under Bubble card backdrops, z-index -3)</option>
+                <option value="bubble" ${cfg.spatial_mode === 'bubble' ? 'selected' : ''}>Bubble aware (under Bubble card backdrops, z-index 3)</option>
                 <option value="gradient-mask" ${cfg.spatial_mode === 'gradient-mask' ? 'selected' : ''}>Gradient mask (effects around card edges)</option>
                 <option value="foreground" ${!cfg.spatial_mode || cfg.spatial_mode === 'foreground' ? 'selected' : ''}>Foreground (current behavior, above cards)</option>
               </select>
