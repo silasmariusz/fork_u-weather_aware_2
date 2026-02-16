@@ -15,7 +15,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   build:
@@ -35,21 +34,19 @@ jobs:
 
       - name: Build for HACS
         run: npm run build:hacs
+        id: build
 
       - name: Verify build output
         run: |
-          test -f fork_u-weather_aware.js && echo "Build OK" && wc -c fork_u-weather_aware.js
-          head -c 100 fork_u-weather_aware.js | cat -v
+          ls -la fork_u-weather_aware.js dist/ 2>/dev/null || true
+          head -c 150 fork_u-weather_aware.js
+          echo ""
+          wc -c fork_u-weather_aware.js
 
-      - name: Create PR with bundle
-        uses: peter-evans/create-pull-request@v6
+      - name: Commit and push bundle
+        uses: EndBug/add-and-commit@v9
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "chore: rebuild bundle for HACS"
-          branch: build/bundle
-          delete-branch: true
-          title: "chore: Rebuild bundle for HACS"
-          body: "Auto-generated PR with built fork_u-weather_aware.js (fixes 404 main.js). Merge to fix."
-          add-paths: |
-            fork_u-weather_aware.js
-            workers/
+          default_author: github_actions
+          message: "chore: rebuild bundle for HACS [skip ci]"
+          add: "fork_u-weather_aware.js workers/"
+          push: true
