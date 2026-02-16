@@ -276,6 +276,20 @@ Recommended sensors:
 Troubleshooting
 ---------------
 
+### 404 main.js / Failed to load resource
+
+If you see `GET .../src/main.js 404 (Not Found)`, the card needs the built bundle. Either:
+
+1. **Update via HACS** – Ensure you have the latest version (the repo should include the built file).
+2. **Manual build** – If you have Node.js installed:
+   ```bash
+   cd fork_u-weather_aware_2
+   npm install
+   npm run build:hacs
+   # Then copy the built fork_u-weather_aware.js to your HACS folder
+   ```
+3. **Download artifact** – Go to [Actions](https://github.com/silasmariusz/fork_u-weather_aware_2/actions), open the latest **Build** run, download the **hacs-bundle** artifact, and replace `fork_u-weather_aware.js` in your HACS install folder.
+
 - Overlay not visible?  
   - Check the browser console for errors.  
   - Verify the card `type` is `custom:fork-u-weather-aware-card`.  
