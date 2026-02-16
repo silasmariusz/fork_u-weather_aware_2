@@ -1541,7 +1541,6 @@ function createSunBeamEffect(ctx) {
   const originX = Math.max(0, Math.min(1, (sun.azimuth - 90) / 180));
   const originY = 0.08 + 0.35 * (1 - Math.min(90, Math.max(0, sun.elevation)) / 90);
   const uniforms = {
-    uTime: { value: 0 },
     uOpacity: { value: ctx.opacity / 100 },
     uViewSize: { value: new THREE.Vector2(ctx.viewWidth, ctx.viewHeight) },
     uOrigin: { value: new THREE.Vector2(originX, originY) },
@@ -1554,17 +1553,14 @@ function createSunBeamEffect(ctx) {
       varying vec3 vPosition;
       uniform vec2 uViewSize;
       uniform vec2 uOrigin;
-      uniform float uTime;
       uniform float uOpacity;
       uniform float uUvIndex;
       void main() {
         vec2 uv = vec2((vPosition.x / uViewSize.x) + 0.5, (vPosition.y / uViewSize.y) + 0.5);
         vec2 dir = uOrigin - uv;
         float dist = length(dir);
-        float angle = atan(dir.y, dir.x);
-        float beams = sin(angle * 18.0 + uTime * 0.8) * 0.5 + 0.5;
-        float intensity = smoothstep(0.6, 0.0, dist) * beams;
-        float alpha = intensity * 0.65 * uOpacity;
+        float intensity = smoothstep(0.85, 0.15, dist);
+        float alpha = intensity * 0.28 * uOpacity;
         vec3 color;
         if (uUvIndex >= 6.0) {
           color = mix(vec3(1.0, 0.5, 0.15), vec3(1.0, 0.35, 0.1), dist);
@@ -1586,8 +1582,7 @@ function createSunBeamEffect(ctx) {
 
   return {
     group,
-    update(delta, _time, extras) {
-      uniforms.uTime.value += delta;
+    update(_delta, _time, extras) {
       if (extras?.sunPosition) {
         const s = extras.sunPosition;
         uniforms.uOrigin.value.set(
