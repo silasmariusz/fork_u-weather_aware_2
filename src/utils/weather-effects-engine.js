@@ -2,33 +2,13 @@
  * Weather Effects Engine - Worker (OffscreenCanvas) or main-thread fallback
  */
 import { WeatherEffectsCore } from './weather-effects-core.js';
+import DynamicWeatherWorker from '../workers/dynamic-weather-worker.js?worker&inline';
 
 const supportsOffscreenCanvas =
   typeof window !== 'undefined' &&
   typeof Worker !== 'undefined' &&
   typeof HTMLCanvasElement !== 'undefined' &&
   'transferControlToOffscreen' in HTMLCanvasElement.prototype;
-
-/** Resolve worker script URL (for Vite bundling + fallback when loaded as single script) */
-function getWorkerUrl() {
-  try {
-    if (typeof import.meta !== 'undefined' && import.meta?.url) {
-      return new URL('../workers/dynamic-weather-worker.js', import.meta.url).href;
-    }
-  } catch (_) {}
-  const scripts = document.getElementsByTagName('script');
-  for (let i = scripts.length - 1; i >= 0; i--) {
-    const src = scripts[i]?.src;
-    if (src) {
-      try {
-        return new URL('workers/dynamic-weather-worker.js', src).href;
-      } catch (e) {
-        return src.replace(/\/[^/?#]*([?#].*)?$/, '/workers/dynamic-weather-worker.js$1');
-      }
-    }
-  }
-  return '';
-}
 
 export class WeatherEffectsEngine {
   constructor(container, options = {}) {
@@ -75,19 +55,7 @@ export class WeatherEffectsEngine {
     if (this.worker) return;
 
     try {
-      // Use Vite's worker syntax so the worker gets bundled; fallback for non-bundled load
-      let workerUrl;
-      try {
-        workerUrl = new URL('../workers/dynamic-weather-worker.js', import.meta.url).href;
-      } catch (_) {
-        workerUrl = getWorkerUrl();
-      }
-      if (!workerUrl) {
-        this.handleWorkerFailure();
-        return;
-      }
-
-      this.worker = new Worker(workerUrl);
+      this.worker = new DynamicWeatherWorker();
       this.worker.onmessage = (e) => {
         if (e.data?.type === 'READY') {
           this.workerState = 'ready';
