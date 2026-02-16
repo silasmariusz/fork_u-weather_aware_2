@@ -47,8 +47,19 @@ export class WeatherEffectsEngine {
     return dpr;
   }
 
+  /** Worker is ready - we can post directly */
   useWorkerPath() {
-    return supportsOffscreenCanvas && this.workerState !== 'failed' && this.workerState === 'ready';
+    return supportsOffscreenCanvas && this.workerState === 'ready';
+  }
+
+  /** Use worker (post or queue) - canvas is transferred, do NOT use fallback when pending */
+  shouldUseWorkerOrQueue() {
+    return supportsOffscreenCanvas && this.workerState !== 'failed';
+  }
+
+  /** Safe to use fallback - canvas is NOT transferred (either never tried worker, or recreated after failure) */
+  shouldUseFallbackCore() {
+    return !supportsOffscreenCanvas || this.workerState === 'failed';
   }
 
   initWorker() {
@@ -161,7 +172,7 @@ export class WeatherEffectsEngine {
     this.isMobile = window.innerWidth < 600 || 'ontouchstart' in window;
     this.devicePixelRatio = this.effectiveDpr();
 
-    if (this.useWorkerPath()) {
+    if (this.shouldUseWorkerOrQueue()) {
       this.postWorkerMessage({
         type: 'RESIZE',
         viewportWidth: this.viewportWidth,
@@ -169,8 +180,7 @@ export class WeatherEffectsEngine {
         devicePixelRatio: this.devicePixelRatio,
         isMobile: this.isMobile,
       });
-    } else {
-      this.ensureFallbackCore();
+    } else if (this.shouldUseFallbackCore() && this.fallbackCore) {
       this.fallbackCore.resize({
         viewportWidth: this.viewportWidth,
         viewportHeight: this.viewportHeight,
@@ -191,34 +201,34 @@ export class WeatherEffectsEngine {
 
     this.currentEffect = effect;
 
-    if (this.useWorkerPath()) {
+    if (this.shouldUseWorkerOrQueue()) {
       this.postWorkerMessage({
         type: 'START',
         effect,
         opacity: this.opacity,
         options: this.effectOptions,
       });
-    } else {
+    } else if (this.shouldUseFallbackCore()) {
       this.ensureFallbackCore();
-      this.fallbackCore.start(effect, this.opacity, this.effectOptions);
+      this.fallbackCore?.start(effect, this.opacity, this.effectOptions);
     }
   }
 
   stop() {
     this.currentEffect = 'none';
-    if (this.useWorkerPath()) {
+    if (this.shouldUseWorkerOrQueue()) {
       this.postWorkerMessage({ type: 'STOP' });
-    } else {
-      this.fallbackCore?.stop();
+    } else if (this.fallbackCore) {
+      this.fallbackCore.stop();
     }
   }
 
   setOpacity(opacity) {
     this.opacity = Math.max(0, Math.min(100, opacity));
-    if (this.useWorkerPath()) {
+    if (this.shouldUseWorkerOrQueue()) {
       this.postWorkerMessage({ type: 'SET_OPACITY', opacity: this.opacity });
-    } else {
-      this.fallbackCore?.setOpacity(this.opacity);
+    } else if (this.fallbackCore) {
+      this.fallbackCore.setOpacity(this.opacity);
     }
   }
 
@@ -228,7 +238,7 @@ export class WeatherEffectsEngine {
     this.isMobile = options.isMobile ?? (window.innerWidth < 600 || 'ontouchstart' in window);
     this.devicePixelRatio = options.devicePixelRatio ?? this.effectiveDpr();
 
-    if (this.useWorkerPath()) {
+    if (this.shouldUseWorkerOrQueue()) {
       this.postWorkerMessage({
         type: 'RESIZE',
         viewportWidth: this.viewportWidth,
@@ -236,9 +246,9 @@ export class WeatherEffectsEngine {
         devicePixelRatio: this.devicePixelRatio,
         isMobile: this.isMobile,
       });
-    } else {
+    } else if (this.shouldUseFallbackCore()) {
       this.ensureFallbackCore();
-      this.fallbackCore.resize({
+      this.fallbackCore?.resize({
         viewportWidth: this.viewportWidth,
         viewportHeight: this.viewportHeight,
         devicePixelRatio: this.devicePixelRatio,
@@ -258,7 +268,7 @@ export class WeatherEffectsEngine {
     window.removeEventListener('resize', this.resizeHandler);
 
     if (this.worker) {
-      this.postWorkerMessage({ type: 'DISPOSE' });
+      this.worker.postMessage({ type: 'DISPOSE' });
       this.worker.terminate();
       this.worker = null;
     }
