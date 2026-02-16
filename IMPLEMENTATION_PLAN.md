@@ -97,3 +97,19 @@
 | Słońce            | `weather-overlay-three.js`, `weather-effects-core.js` |
 | Błyskawice        | `weather-overlay-three.js`, `weather-effects-core.js` |
 | Raindrops.js style| nowy moduł + `weather-overlay-three.js`         |
+
+---
+
+## Braki w edytorze (README vs editor)
+
+| Opcja | W README | W edytorze | Uwagi |
+|-------|----------|------------|-------|
+| `rain_max_tilt_deg` | ✓ (30) | ❌ | Brak pola – ustawiany przez YAML |
+| `rain_wind_min_kmh` | ✓ (3) | ❌ | Brak pola – ustawiany przez YAML |
+| `theme_mode` | ✓ (null=auto) | ❌ | Ustawiane z hass.themes – brak ręcznego override |
+| `gaming_mode_entity` | input_boolean / binary_sensor | tylko input_boolean | Dodać `binary_sensor` do domains |
+| `precipitation` → prędkość deszczu | ✓ | sensor jest | Sprawdzić, czy Three.js używa do speed |
+| `cloud_coverage` → gęstość chmur/fogu | ✓ | sensor jest | Sprawdzić użycie |
+| `TOGGLE_ENTITY`, `ENABLED_DASHBOARDS` | w przykładach | ❌ | Stałe w kodzie, nie w edytorze |
+
+**Do dodania w edytorze:** `rain_max_tilt_deg`, `rain_wind_min_kmh` w sekcji Wind & clouds.

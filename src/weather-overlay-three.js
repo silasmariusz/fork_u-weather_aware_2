@@ -249,7 +249,7 @@ function getWindData() {
     let brg = 270;
     if (cfg.debug_wind_direction && cfg.debug_wind_direction !== 'Use sensors') {
       const d = cfg.debug_wind_direction;
-      brg = BEARING_MAP[d] ?? parseFloat(d) || 270;
+      brg = (BEARING_MAP[d] ?? parseFloat(d)) || 270;
     } else {
       const ha = getHomeAssistant();
       if (ha?.hass && cfg.wind_direction_entity) {
