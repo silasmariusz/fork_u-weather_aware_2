@@ -1,0 +1,47 @@
+# Build bundle and commit to repo (HACS needs the built file, not source)
+name: Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'fork_u-weather_aware-editor.js'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.js'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build for HACS
+        run: npm run build:hacs
+
+      - name: Commit and push built files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add fork_u-weather_aware.js
+          git add workers/ 2>/dev/null || true
+          if git diff --staged --quiet; then
+            echo "No build changes to commit"
+          else
+            git commit -m "chore: rebuild bundle [skip ci]"
+            git push
+          fi
