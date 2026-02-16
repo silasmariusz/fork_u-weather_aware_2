@@ -953,7 +953,7 @@ function createStarsEffect(ctx) {
         void main() {
           vec2 c = vUv - 0.5;
           float d = length(c) * 2.0;
-          float alpha = exp(-d * d * 2.8) * uOpacity;
+          float alpha = smoothstep(1.2, 0.3, d) * uOpacity;
           gl_FragColor = vec4(0.96, 0.97, 1.0, alpha);
         }
       `,
@@ -1252,21 +1252,25 @@ function createAuroraNorthernGradients(core, visibilityScore) {
         for (int i = 0; i < 4; i++) { v += amp * noise(p); p *= 2.0; amp *= 0.5; }
         return v;
       }
+      vec3 gradient(float t) {
+        vec3 a = vec3(0.38, 0.65, 0.98);
+        vec3 b = vec3(0.91, 0.47, 0.98);
+        vec3 c = vec3(0.37, 0.92, 0.83);
+        if (t < 0.2) return mix(a, b, smoothstep(0.0, 0.2, t));
+        if (t < 0.4) return mix(b, a, smoothstep(0.2, 0.4, t));
+        if (t < 0.6) return mix(a, c, smoothstep(0.4, 0.6, t));
+        if (t < 0.8) return mix(c, a, smoothstep(0.6, 0.8, t));
+        return mix(a, b, smoothstep(0.8, 1.0, t));
+      }
       void main() {
         vec2 uv = vUv;
-        float t = uv.x * 0.6 + uv.y * 0.4 + uTime * 0.012;
-        float n = fbm(uv * 3.0 + uTime * 0.03);
-        t = fract(t + n * 0.15);
-        vec3 col;
-        if (t < 0.2) col = mix(vec3(0.38, 0.65, 0.98), vec3(0.91, 0.47, 0.98), t * 5.0);
-        else if (t < 0.4) col = mix(vec3(0.91, 0.47, 0.98), vec3(0.38, 0.65, 0.98), (t - 0.2) * 5.0);
-        else if (t < 0.6) col = mix(vec3(0.38, 0.65, 0.98), vec3(0.37, 0.92, 0.83), (t - 0.4) * 5.0);
-        else if (t < 0.8) col = mix(vec3(0.37, 0.92, 0.83), vec3(0.38, 0.65, 0.98), (t - 0.6) * 5.0);
-        else col = mix(vec3(0.38, 0.65, 0.98), vec3(0.91, 0.47, 0.98), (t - 0.8) * 5.0);
-        vec2 fromTopRight = uv - vec2(1.0, 0.0);
-        float dist = length(fromTopRight) * 1.4;
-        float mask = 1.0 - smoothstep(0.3, 1.0, dist);
-        float alpha = mask * uOpacity * (0.9 + 0.1 * n);
+        float n = fbm(uv * 2.5 + uTime * 0.02) * 0.08;
+        float t = fract(uv.x * 0.5 + (1.0 - uv.y) * 0.5 + uTime * 0.01 + n);
+        vec3 col = gradient(t);
+        vec2 fromTop = uv - vec2(0.5, 1.0);
+        float dist = length(fromTop) * 1.8;
+        float mask = 1.0 - smoothstep(0.25, 0.95, dist);
+        float alpha = mask * uOpacity * (0.92 + 0.08 * fbm(uv * 4.0));
         gl_FragColor = vec4(col, alpha);
       }
     `,
@@ -1319,8 +1323,9 @@ function createAuroraOverlay(core, visibilityScore, variant) {
   }
   const viewW = core.viewWidth;
   const viewH = core.viewHeight;
-  const topY = viewH / 2 - 2;
-  const bandHeight = 5;
+  const bandGlowHeight = 45;
+  const bandSpacing = 12;
+  const topY = viewH / 2 - bandGlowHeight / 2 - 5;
   const group = new THREE.Group();
 
   const auroraVertexShader = `
@@ -1341,19 +1346,22 @@ function createAuroraOverlay(core, visibilityScore, variant) {
     void main() {
       float t = 0.5 + 0.5 * sin(uTime * uSpeed);
       vec3 col = mix(uColorA, uColorB, t);
-      float dist = abs(vUv.y - 0.5) * 2.0;
-      float alpha = (1.0 - smoothstep(0.3, 1.0, dist)) * uOpacity;
+      vec2 c = vUv - vec2(0.5, 0.5);
+      c.y *= 4.0;
+      float d = length(c) * 2.0;
+      float alpha = smoothstep(1.4, 0.2, d) * uOpacity;
       gl_FragColor = vec4(col, alpha);
     }
   `;
 
   for (let i = 0; i < AURORA_BANDS.length; i++) {
     const band = AURORA_BANDS[i];
-    const w = viewW * band.width;
-    const geo = new THREE.PlaneGeometry(w, bandHeight);
+    const w = viewW * band.width * 1.1;
+    const h = bandGlowHeight;
+    const geo = new THREE.PlaneGeometry(w, h);
     const uniforms = {
       uTime: { value: 0 },
-      uOpacity: { value: 0.4 * (visibilityScore || 0.5) * (core.opacity / 100) },
+      uOpacity: { value: 0.35 * (visibilityScore || 0.5) * (core.opacity / 100) },
       uColorA: { value: new THREE.Vector3().fromArray(band.colorA) },
       uColorB: { value: new THREE.Vector3().fromArray(band.colorB) },
       uSpeed: { value: band.speed },
@@ -1367,7 +1375,7 @@ function createAuroraOverlay(core, visibilityScore, variant) {
       blending: THREE.AdditiveBlending,
     });
     const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(0, topY - i * (bandHeight + 1), -8);
+    mesh.position.set(0, topY - i * (bandGlowHeight + bandSpacing), -8);
     mesh.renderOrder = 9;
     group.add(mesh);
   }
@@ -1376,7 +1384,7 @@ function createAuroraOverlay(core, visibilityScore, variant) {
   const bandMeshes = group.children;
 
   const applyOpacity = () => {
-    const base = 0.4 * currentVisibilityScore * Math.max(0, Math.min(1, core.opacity / 100));
+    const base = 0.35 * currentVisibilityScore * Math.max(0, Math.min(1, core.opacity / 100));
     for (const mesh of bandMeshes) {
       mesh.material.uniforms.uOpacity.value = base;
     }
