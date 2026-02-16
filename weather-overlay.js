@@ -485,6 +485,125 @@
     { sizeMin: 10, sizeMax: 14, speedFactor: 0.03, swayAmpMin: 10, swayAmpMax: 20, opacity: 0.55, blur: 7, colorMin: 210, colorMax: 219 },
     { sizeMin: 8, sizeMax: 12, speedFactor: 0.01, swayAmpMin: 10, swayAmpMax: 20, opacity: 0.4, blur: 30, colorMin: 200, colorMax: 209 }
   ];
+
+  // Texture Cache for performance optimization
+  const textureCache = {};
+
+  function getCloudPuffTexture(color) {
+    const key = `cloud_${color}`;
+    if (textureCache[key]) return textureCache[key];
+
+    const size = 64;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const half = size / 2;
+
+    const gradient = ctx.createRadialGradient(half, half, 0, half, half, half);
+    gradient.addColorStop(0, color);
+    gradient.addColorStop(0.6, color.replace(/[\d.]+\)$/g, '0.02)'));
+    gradient.addColorStop(1, 'rgba(180, 180, 180, 0)');
+
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, size, size);
+
+    textureCache[key] = canvas;
+    return canvas;
+  }
+
+  function getFogTexture(color, theme) {
+    const key = `fog_${color}_${theme}`;
+    if (textureCache[key]) return textureCache[key];
+
+    const width = 256;
+    const height = 1;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+
+    const grad = ctx.createLinearGradient(0, 0, width, 0);
+    if (theme === 'light') {
+      grad.addColorStop(0, 'rgba(200, 200, 200, 0)');
+      grad.addColorStop(0.5, color || 'rgba(210,210,210,0.25)');
+      grad.addColorStop(1, 'rgba(200, 200, 200, 0)');
+    } else {
+      grad.addColorStop(0, 'rgba(220, 220, 220, 0)');
+      grad.addColorStop(0.5, color);
+      grad.addColorStop(1, 'rgba(220, 220, 220, 0)');
+    }
+
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, width, height);
+
+    textureCache[key] = canvas;
+    return canvas;
+  }
+
+  function getSmogTexture(isMobile, theme) {
+    const key = `smog_${isMobile}_${theme}`;
+    if (textureCache[key]) return textureCache[key];
+
+    const size = 128;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const half = size / 2;
+
+    // Use a generic gradient structure, we can modulate opacity via globalAlpha
+    const grad = ctx.createRadialGradient(half, half, 0, half, half, half);
+    const scale = theme === 'light' ? 1.2 : 1;
+    
+    // Base colors (using max opacity, will fade with globalAlpha)
+    grad.addColorStop(0, `rgba(138,140,145,${Math.min(1, 0.38 * scale)})`);
+    grad.addColorStop(0.3, `rgba(128,130,135,${Math.min(1, 0.25 * scale)})`);
+    grad.addColorStop(0.6, `rgba(118,120,125,${Math.min(1, 0.11 * scale)})`);
+    grad.addColorStop(0.9, `rgba(108,110,115,${Math.min(1, 0.035 * scale)})`);
+    grad.addColorStop(1, 'rgba(98,100,105,0)');
+
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+
+    textureCache[key] = canvas;
+    return canvas;
+  }
+
+  function getSunGlowTexture(isHighUv) {
+    const key = `sun_glow_${isHighUv}`;
+    if (textureCache[key]) return textureCache[key];
+
+    const radius = 500;
+    const size = radius * 2;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const half = size / 2;
+
+    const sunGradient = ctx.createRadialGradient(half, half, 0, half, half, radius);
+    if (isHighUv) {
+      sunGradient.addColorStop(0, 'rgba(255, 140, 50, 0.35)');
+      sunGradient.addColorStop(0.2, 'rgba(255, 110, 40, 0.22)');
+      sunGradient.addColorStop(0.5, 'rgba(255, 90, 30, 0.12)');
+      sunGradient.addColorStop(0.8, 'rgba(255, 70, 20, 0.04)');
+      sunGradient.addColorStop(1, 'rgba(255, 50, 10, 0)');
+    } else {
+      sunGradient.addColorStop(0, 'rgba(255, 220, 120, 0.22)');
+      sunGradient.addColorStop(0.2, 'rgba(255, 200, 90, 0.14)');
+      sunGradient.addColorStop(0.5, 'rgba(255, 185, 70, 0.07)');
+      sunGradient.addColorStop(0.8, 'rgba(255, 160, 50, 0.02)');
+      sunGradient.addColorStop(1, 'rgba(255, 140, 40, 0)');
+    }
+
+    ctx.fillStyle = sunGradient;
+    ctx.fillRect(0, 0, size, size);
+
+    textureCache[key] = canvas;
+    return canvas;
+  }
+
   
   // Particle class
   class Particle {
@@ -632,6 +751,7 @@
       } else if (this.type === 'clouds') {
         const baseOpacity = this.opacity * 0.6;
         const baseColor = weatherConfigs[currentWeather]?.color || 'rgba(180, 180, 180, 0.10)';
+        const cloudTex = getCloudPuffTexture(baseColor);
         
         for (let i = 0; i < this.puffCount; i++) {
           const angle = (i / this.puffCount) * Math.PI * 2;
@@ -639,19 +759,9 @@
           const offsetX = Math.cos(angle) * this.size * 0.4;
           const offsetY = Math.sin(angle) * this.size * 0.25;
           
-          const gradient = ctx.createRadialGradient(
-            this.x + offsetX, this.y + offsetY, 0,
-            this.x + offsetX, this.y + offsetY, puffSize
-          );
-          gradient.addColorStop(0, baseColor);
-          gradient.addColorStop(0.6, baseColor.replace(/[\d.]+\)$/g, '0.02)'));
-          gradient.addColorStop(1, 'rgba(180, 180, 180, 0)');
-          
           ctx.globalAlpha = baseOpacity;
-          ctx.fillStyle = gradient;
-          ctx.beginPath();
-          ctx.arc(this.x + offsetX, this.y + offsetY, puffSize, 0, Math.PI * 2);
-          ctx.fill();
+          // Draw cached texture centered at puff position
+          ctx.drawImage(cloudTex, this.x + offsetX - puffSize, this.y + offsetY - puffSize, puffSize * 2, puffSize * 2);
         }
         ctx.globalAlpha = 1;
         
@@ -726,23 +836,12 @@
         ctx.restore();
       } else if (this.type === 'fog') {
         const theme = getThemeMode();
-        const grad = ctx.createLinearGradient(
-            this.x - this.size, 0,
-            this.x + this.size, 0
-        );
-        if (theme === 'light') {
-          grad.addColorStop(0, 'rgba(200, 200, 200, 0)');
-          grad.addColorStop(0.5, weatherConfigs[currentWeather].color || 'rgba(210,210,210,0.25)');
-          grad.addColorStop(1, 'rgba(200, 200, 200, 0)');
-        } else {
-          grad.addColorStop(0, 'rgba(220, 220, 220, 0)');
-          grad.addColorStop(0.5, weatherConfigs[currentWeather].color);
-          grad.addColorStop(1, 'rgba(220, 220, 220, 0)');
-        }
+        const fogColor = weatherConfigs[currentWeather].color;
+        const fogTex = getFogTexture(fogColor, theme);
         
         ctx.globalAlpha = this.opacity * 0.2;
-        ctx.fillStyle = grad;
-        ctx.fillRect(this.x - this.size, this.y -15, this.size * 2000, 300);
+        // Stretch the 1px high texture to full height (300px) and width
+        ctx.drawImage(fogTex, this.x - this.size, this.y - 15, this.size * 2000, 300);
         ctx.globalAlpha = 1;
         
       } else if (this.type === 'hail') {
@@ -1098,15 +1197,16 @@
         smogCtx.arc(p.x, p.y, r, 0, Math.PI * 2);
         smogCtx.fill();
       } else {
-        const grad = smogCtx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
-        const scale = theme === 'light' ? 1.2 : 1;
-        grad.addColorStop(0, `rgba(138,140,145,${Math.min(0.42, op * 0.38 * scale)})`);
-        grad.addColorStop(0.3, `rgba(128,130,135,${Math.min(0.28, op * 0.25 * scale)})`);
-        grad.addColorStop(0.6, `rgba(118,120,125,${Math.min(0.12, op * 0.11 * scale)})`);
-        grad.addColorStop(0.9, `rgba(108,110,115,${Math.min(0.04, op * 0.035 * scale)})`);
-        grad.addColorStop(1, 'rgba(98,100,105,0)');
-        smogCtx.fillStyle = grad;
-        smogCtx.fillRect(p.x - r, p.y - r, r * 2, r * 2);
+        const theme = getThemeMode();
+        const smogTex = getSmogTexture(isMobile, theme);
+        
+        // Modulate opacity using globalAlpha (texture has max opacity)
+        // Original logic: opacity scaled by fadeOut, then by theme/mobile factors
+        const finalAlpha = op; 
+        
+        smogCtx.globalAlpha = finalAlpha;
+        smogCtx.drawImage(smogTex, p.x - r, p.y - r, r * 2, r * 2);
+        smogCtx.globalAlpha = 1;
       }
     }
   }
@@ -1154,33 +1254,14 @@
     const sunX = (pos && pos.x != null) ? window.innerWidth * pos.x : window.innerWidth * 0.90;
     const sunY = (pos && pos.y != null) ? window.innerHeight * pos.y : window.innerHeight * 0.10;
 
-    const sunGradient = ctx.createRadialGradient(
-      sunX, sunY, 0,
-      sunX, sunY, 500
-    );
-    if (isHighUv) {
-      // Deep orange glowing light when UV is high
-      sunGradient.addColorStop(0, 'rgba(255, 140, 50, 0.35)');
-      sunGradient.addColorStop(0.2, 'rgba(255, 110, 40, 0.22)');
-      sunGradient.addColorStop(0.5, 'rgba(255, 90, 30, 0.12)');
-      sunGradient.addColorStop(0.8, 'rgba(255, 70, 20, 0.04)');
-      sunGradient.addColorStop(1, 'rgba(255, 50, 10, 0)');
-    } else {
-      // Gentle yellow in normal UV conditions
-      sunGradient.addColorStop(0, 'rgba(255, 220, 120, 0.22)');
-      sunGradient.addColorStop(0.2, 'rgba(255, 200, 90, 0.14)');
-      sunGradient.addColorStop(0.5, 'rgba(255, 185, 70, 0.07)');
-      sunGradient.addColorStop(0.8, 'rgba(255, 160, 50, 0.02)');
-      sunGradient.addColorStop(1, 'rgba(255, 140, 40, 0)');
-    }
-
-    ctx.fillStyle = sunGradient;
-    ctx.beginPath();
-    ctx.arc(sunX, sunY, 500, 0, Math.PI * 2);
-    ctx.fill();
+    const sunTex = getSunGlowTexture(isHighUv);
+    const radius = 500;
+    
+    // Draw texture centered
+    ctx.drawImage(sunTex, sunX - radius, sunY - radius);
   }
 
-  // Sunny2: sun beams (rays from sun position, Ultra-Card style in Canvas 2D)
+  // Sunny2: sun beams (rays from sun position)
   let sunBeamsTime = 0;
   function drawSunBeams() {
     const pos = getSunPosition();

@@ -1,0 +1,392 @@
+/**
+ * Weather Overlay - Three.js (WebGL) version
+ * Replaces Canvas 2D rendering with WeatherEffectsCore
+ */
+import { WeatherEffectsEngine } from './utils/weather-effects-engine.js';
+import { mapWeatherStateToEffect } from './utils/weather-condition-mapper.js';
+
+const UPDATE_INTERVAL = 5000;
+const ENABLED_DASHBOARDS = [];
+const TOGGLE_ENTITY = '';
+const RAIN_SENSOR_ENTITY = '';
+const REQUIRE_RAIN_CONFIRMATION = false;
+const DEBUG_MODE = false;
+
+function log(msg, data = null) {
+  if (DEBUG_MODE) console.log('[Weather Overlay]', msg, data ?? '');
+}
+function warn(msg, data = null) {
+  console.warn('[Weather Overlay] ⚠️', msg, data ?? '');
+}
+function error(msg, data = null) {
+  console.error('[Weather Overlay] ❌', msg, data ?? '');
+}
+
+function getHomeAssistant() {
+  const ha = document.querySelector('home-assistant');
+  return ha?.hass ? ha : null;
+}
+
+function getWeatherEntityId() {
+  return (window.ForkUWeatherAwareConfig || {}).weather_entity || 'weather.openweathermap';
+}
+
+function getWeatherState() {
+  try {
+    const ha = getHomeAssistant();
+    if (!ha) return null;
+
+    const cfg = window.ForkUWeatherAwareConfig || {};
+    const WEATHER_ENTITY = getWeatherEntityId();
+
+    if (cfg.development_mode && cfg.test_effect && cfg.test_effect !== 'Use Real Weather') {
+      let devState = cfg.test_effect;
+      if (devState === 'snowy' && cfg.snowy_variant === 'snowy2') devState = 'snowy2';
+      log('Using DEVELOPMENT weather:', devState);
+      return devState;
+    }
+
+    const weatherEntity = ha.hass.states[WEATHER_ENTITY];
+    if (!weatherEntity) {
+      error(`Weather entity '${WEATHER_ENTITY}' not found`);
+      return null;
+    }
+
+    let weatherState = (weatherEntity.state || '').toLowerCase().replace(/_/g, '-');
+
+    const drizzleMax = parseFloat(cfg.drizzle_precipitation_max) || 2.5;
+    if (weatherState === 'rainy') {
+      const precip =
+        weatherEntity.attributes?.precipitation != null
+          ? parseFloat(weatherEntity.attributes.precipitation)
+          : weatherEntity.attributes?.precipitation_1h != null
+            ? parseFloat(weatherEntity.attributes.precipitation_1h)
+            : NaN;
+      if (!isNaN(precip) && precip > 0 && precip <= drizzleMax) {
+        weatherState = 'rainy-drizzle';
+      }
+    }
+
+    if (RAIN_SENSOR_ENTITY && REQUIRE_RAIN_CONFIRMATION && (weatherState === 'rainy' || weatherState === 'pouring')) {
+      const rainSensor = ha.hass.states[RAIN_SENSOR_ENTITY];
+      if (rainSensor) {
+        const rainRate = parseFloat(rainSensor.state);
+        if (isNaN(rainRate) || rainRate <= 0) weatherState = 'cloudy';
+      }
+    }
+
+    return weatherState;
+  } catch (err) {
+    error('Error getting weather state:', err);
+    return null;
+  }
+}
+
+function isOverlayEnabled() {
+  try {
+    const cfg = window.ForkUWeatherAwareConfig || {};
+    if (cfg.enabled === false) return false;
+    if (!TOGGLE_ENTITY) return true;
+    const ha = getHomeAssistant();
+    if (!ha) return true;
+    const toggle = ha.hass.states[TOGGLE_ENTITY];
+    if (!toggle) return true;
+    return toggle.state === 'on';
+  } catch (err) {
+    error('Error checking overlay:', err);
+    return true;
+  }
+}
+
+function isOnEnabledDashboard() {
+  if (!ENABLED_DASHBOARDS?.length) return true;
+  const path = window.location.pathname;
+  const parts = path.split('/').filter(Boolean);
+  if (parts.length === 0) return ENABLED_DASHBOARDS.includes('lovelace') || ENABLED_DASHBOARDS.includes('home');
+  if (parts[0] === 'lovelace') {
+    const dash = parts.length === 1 ? 'lovelace' : parts[1];
+    return ENABLED_DASHBOARDS.includes(dash);
+  }
+  for (const part of parts) {
+    if (ENABLED_DASHBOARDS.includes(part)) return true;
+  }
+  return ENABLED_DASHBOARDS.includes(parts[parts.length - 1]);
+}
+
+function isMobileDevice() {
+  return window.innerWidth < 600 || 'ontouchstart' in window;
+}
+
+function isWebGLSupported() {
+  try {
+    const c = document.createElement('canvas');
+    return !!(c.getContext('webgl2') || c.getContext('webgl') || c.getContext('experimental-webgl'));
+  } catch (e) {
+    return false;
+  }
+}
+
+function getEffectiveDpr() {
+  const cfg = window.ForkUWeatherAwareConfig || {};
+  let dpr = window.devicePixelRatio || 1;
+  if (isMobileDevice() && cfg.mobile_limit_dpr) dpr = Math.min(dpr, 2);
+  return dpr;
+}
+
+function isSmogAlertActive() {
+  const cfg = window.ForkUWeatherAwareConfig || {};
+  const pm25Id = cfg.pm25_entity;
+  const pm4Id = cfg.pm4_entity;
+  const pm10Id = cfg.pm10_entity;
+  const thresh25 = cfg.smog_threshold_pm25 ?? 35;
+  const thresh4 = cfg.smog_threshold_pm4 ?? 50;
+  const thresh10 = cfg.smog_threshold_pm10 ?? 50;
+  const ha = getHomeAssistant();
+  if (!ha?.hass) return false;
+  if (pm25Id) {
+    const e = ha.hass.states[pm25Id];
+    if (e && e.state !== 'unavailable' && e.state !== 'unknown') {
+      const v = parseFloat(e.state);
+      if (!isNaN(v) && v >= thresh25) return true;
+    }
+  }
+  if (pm4Id) {
+    const e = ha.hass.states[pm4Id];
+    if (e && e.state !== 'unavailable' && e.state !== 'unknown') {
+      const v = parseFloat(e.state);
+      if (!isNaN(v) && v >= thresh4) return true;
+    }
+  }
+  if (pm10Id) {
+    const e = ha.hass.states[pm10Id];
+    if (e && e.state !== 'unavailable' && e.state !== 'unknown') {
+      const v = parseFloat(e.state);
+      if (!isNaN(v) && v >= thresh10) return true;
+    }
+  }
+  return false;
+}
+
+function isEffectEnabled(key) {
+  const cfg = window.ForkUWeatherAwareConfig || {};
+  return cfg[key] !== false;
+}
+
+function isGamingModeActive() {
+  const cfg = window.ForkUWeatherAwareConfig || {};
+  const eid = cfg.gaming_mode_entity;
+  if (!eid || typeof eid !== 'string' || !eid.trim()) return false;
+  const ha = getHomeAssistant();
+  if (!ha?.hass?.states) return false;
+  const ent = ha.hass.states[eid];
+  return !!(ent && String(ent.state).toLowerCase() === 'on');
+}
+
+let cachedMoonPosition = null;
+let sensorCacheTime = 0;
+const SENSOR_CACHE_MS = 3000;
+
+function getMoonPosition() {
+  const now = Date.now();
+  if (now - sensorCacheTime < SENSOR_CACHE_MS && cachedMoonPosition) return cachedMoonPosition;
+  sensorCacheTime = now;
+  try {
+    const cfg = window.ForkUWeatherAwareConfig || {};
+    const ha = getHomeAssistant();
+    if (!ha?.hass) return { x: 0.75, y: 0.12 };
+
+    const moonPosId = cfg.moon_position_entity;
+    const moonPhaseId = cfg.moon_phase_entity;
+    const moonAzId = cfg.moon_azimuth_entity;
+    const moonAltId = cfg.moon_altitude_entity;
+    let moonPos = { x: 0.75, y: 0.12 };
+
+    for (const eid of [moonPosId, moonPhaseId].filter(Boolean)) {
+      const ent = ha.hass.states[eid];
+      if (!ent?.attributes) continue;
+      const attrs = ent.attributes;
+      const azimuth = parseFloat(attrs.azimuth ?? attrs.moon_azimuth_deg);
+      const elev = parseFloat(attrs.elevation ?? attrs.altitude ?? attrs.moon_altitude_deg);
+      if (!isNaN(azimuth) && !isNaN(elev) && elev > 0) {
+        moonPos.x = Math.max(0, Math.min(1, (azimuth - 90) / 180));
+        moonPos.y = 0.08 + 0.22 * (1 - Math.min(90, elev) / 90);
+        break;
+      }
+    }
+    if (moonAzId || moonAltId) {
+      const azEnt = moonAzId ? ha.hass.states[moonAzId] : null;
+      const altEnt = moonAltId ? ha.hass.states[moonAltId] : null;
+      const azimuth = azEnt ? parseFloat(azEnt.state) : NaN;
+      const elev = altEnt ? parseFloat(altEnt.state) : NaN;
+      if (!isNaN(azimuth) && !isNaN(elev) && elev > 0) {
+        moonPos.x = Math.max(0, Math.min(1, (azimuth - 90) / 180));
+        moonPos.y = 0.08 + 0.22 * (1 - Math.min(90, elev) / 90);
+      }
+    }
+    cachedMoonPosition = moonPos;
+    return moonPos;
+  } catch (e) {
+    return cachedMoonPosition || { x: 0.75, y: 0.12 };
+  }
+}
+
+function getSpatialZIndex() {
+  const mode = (window.ForkUWeatherAwareConfig || {}).spatial_mode || 'foreground';
+  const z = { foreground: 9998, background: 1, bubble: 5000, 'gradient-mask': 9997 }[mode];
+  return z ?? 9998;
+}
+
+function filterEffectByConfig(effect) {
+  const cfg = window.ForkUWeatherAwareConfig || {};
+  const toggle = {
+    rain: cfg.enable_rain,
+    rain_storm: cfg.enable_rain && cfg.enable_lightning_effect,
+    rain_drizzle: cfg.enable_rain,
+    snow_gentle: cfg.enable_snow,
+    snow_storm: cfg.enable_snow,
+    fog_light: cfg.enable_fog,
+    fog_dense: cfg.enable_fog,
+    sun_beams: cfg.enable_sun_glow,
+    clouds: cfg.enable_clouds,
+    hail: cfg.enable_hail,
+    lightning: cfg.enable_lightning_effect,
+    stars: cfg.enable_stars,
+  };
+  if (effect && effect !== 'none' && toggle[effect] === false) return 'none';
+  return effect;
+}
+
+let engine = null;
+let container = null;
+let currentWeather = null;
+let lastUpdateTime = 0;
+let lastPath = window.location.pathname;
+
+function applySpatialStyle() {
+  if (!container) return;
+  container.style.setProperty('--weather-overlay-z', String(getSpatialZIndex()));
+}
+
+function updateWeather() {
+  const now = Date.now();
+  if (now - lastUpdateTime < 1000) return;
+
+  const enabled = isOverlayEnabled();
+  const onDashboard = isOnEnabledDashboard();
+
+  if (!enabled || !onDashboard) {
+    if (engine) engine.stop();
+    if (container) container.style.display = 'none';
+    return;
+  }
+
+  lastUpdateTime = now;
+  if (container) container.style.display = 'block';
+
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) {
+    if (engine) engine.stop();
+    if (container) container.style.display = 'none';
+    return;
+  }
+
+  const cfg = window.ForkUWeatherAwareConfig || {};
+  const matrixOnly = cfg.gaming_matrix_only && isGamingModeActive() && isEffectEnabled('enable_matrix');
+  const newWeather = matrixOnly ? null : getWeatherState();
+  const effect = matrixOnly ? 'none' : filterEffectByConfig(mapWeatherStateToEffect(newWeather));
+
+  if (newWeather !== currentWeather || !engine) {
+    currentWeather = newWeather;
+    log('Weather:', newWeather, '→ Effect:', effect);
+  }
+
+  const smogActive = isEffectEnabled('enable_smog_effect') && isSmogAlertActive();
+  const moonPosition = effect === 'stars' && isEffectEnabled('enable_moon_glow') ? getMoonPosition() : null;
+  if (engine) {
+    engine.start(effect, 100, { smogActive, moonPosition });
+  }
+}
+
+function handleResize() {
+  if (!engine) return;
+  engine.resize({
+    viewportWidth: window.innerWidth,
+    viewportHeight: window.innerHeight,
+    isMobile: isMobileDevice(),
+    devicePixelRatio: getEffectiveDpr(),
+  });
+}
+
+function init() {
+  if (container) return;
+
+  log('Initializing Three.js Weather Overlay...');
+
+  if (!isWebGLSupported()) {
+    warn('WebGL not supported - weather overlay disabled');
+    return;
+  }
+
+  container = document.createElement('div');
+  container.id = 'fork-u-weather-overlay';
+  container.style.cssText =
+    'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:var(--weather-overlay-z,9998);';
+  applySpatialStyle();
+  document.body.appendChild(container);
+
+  try {
+    engine = new WeatherEffectsEngine(container, {
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      isMobile: isMobileDevice(),
+      devicePixelRatio: getEffectiveDpr(),
+    });
+
+    if (!isOverlayEnabled() || !isOnEnabledDashboard()) {
+      container.style.display = 'none';
+    } else {
+      const weather = getWeatherState();
+      const effect = filterEffectByConfig(mapWeatherStateToEffect(weather));
+      currentWeather = weather;
+      const smogActive = isEffectEnabled('enable_smog_effect') && isSmogAlertActive();
+      const moonPosition = effect === 'stars' && isEffectEnabled('enable_moon_glow') ? getMoonPosition() : null;
+      engine.start(effect, 100, { smogActive, moonPosition });
+    }
+  } catch (err) {
+    error('Weather overlay init failed:', err);
+    if (container?.parentNode) container.parentNode.removeChild(container);
+    return;
+  }
+
+  setInterval(updateWeather, 1000);
+  window.addEventListener('resize', handleResize);
+
+  setInterval(() => {
+    if (window.location.pathname !== lastPath) {
+      lastPath = window.location.pathname;
+      lastUpdateTime = 0;
+      updateWeather();
+    }
+  }, 500);
+
+  log('Three.js overlay ready');
+}
+
+function waitForHomeAssistant() {
+  let attempts = 0;
+  const check = setInterval(() => {
+    attempts++;
+    if (getHomeAssistant()) {
+      clearInterval(check);
+      init();
+    } else if (attempts >= 60) {
+      clearInterval(check);
+      error('Home Assistant not found after 30s');
+    }
+  }, 500);
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', waitForHomeAssistant);
+} else {
+  waitForHomeAssistant();
+}

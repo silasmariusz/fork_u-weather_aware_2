@@ -1,0 +1,18 @@
+{
+  "name": "fork-u-weather-aware",
+  "version": "2.0.0",
+  "description": "Fork U - Weather Aware - Weather overlay for Home Assistant with Three.js",
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "build:hacs": "vite build && node -e \"const fs=require('fs'),path=require('path'); fs.copyFileSync('dist/fork_u-weather_aware.js','fork_u-weather_aware.js'); if(fs.existsSync('dist/workers')){ fs.mkdirSync('workers',{recursive:true}); for(const f of fs.readdirSync('dist/workers')) fs.copyFileSync(path.join('dist/workers',f),path.join('workers',f)); }\"",
+    "dev": "vite build --watch",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0"
+  }
+}

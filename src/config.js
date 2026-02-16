@@ -1,0 +1,85 @@
+/**
+ * Fork U Weather Aware - default config and global setup
+ */
+const DEFAULT_OVERLAY_CONFIG = {
+  enabled: true,
+  weather_entity: 'weather.openweathermap',
+  development_mode: false,
+  test_effect: 'Use Real Weather',
+  sun_entity: 'sun.sun',
+  moon_phase_entity: null,
+  uv_index_entity: null,
+  moon_position_entity: null,
+  moon_azimuth_entity: null,
+  moon_altitude_entity: null,
+  moon_distance_entity: null,
+  gaming_mode_entity: null,
+  pm25_entity: null,
+  pm4_entity: null,
+  pm10_entity: null,
+  smog_threshold_pm25: 35,
+  smog_threshold_pm4: 50,
+  smog_threshold_pm10: 50,
+  cloud_coverage_entity: null,
+  wind_speed_entity: null,
+  wind_direction_entity: null,
+  precipitation_entity: null,
+  lightning_counter_entity: null,
+  lightning_distance_entity: null,
+  debug_precipitation: null,
+  debug_wind_speed: null,
+  debug_wind_direction: null,
+  debug_lightning_distance: null,
+  debug_lightning_counter: null,
+  debug_cloud_coverage: null,
+  cloud_speed_multiplier: 1,
+  rain_max_tilt_deg: 30,
+  rain_wind_min_kmh: 3,
+  theme_mode: null,
+  drizzle_precipitation_max: 2.5,
+  speed_factor_rain: 1,
+  speed_factor_snow: 1,
+  speed_factor_clouds: 1,
+  speed_factor_fog: 1,
+  speed_factor_smog: 1,
+  speed_factor_hail: 1,
+  speed_factor_lightning: 1,
+  speed_factor_stars: 1,
+  speed_factor_matrix: 1,
+  wind_sway_factor: 0.7,
+  spatial_mode: 'foreground',
+  enable_rain: true,
+  enable_snow: true,
+  enable_clouds: true,
+  enable_fog: true,
+  enable_smog_effect: true,
+  enable_sun_glow: true,
+  enable_moon_glow: true,
+  enable_stars: true,
+  enable_hail: true,
+  enable_lightning_effect: true,
+  enable_matrix: true,
+  enable_window_droplets: true,
+  stars_require_moon: false,
+  mobile_limit_dpr: true,
+  mobile_reduce_particles: true,
+  mobile_snowy2_light: true,
+  mobile_smog_simple: false,
+  mobile_30fps: false,
+  gaming_matrix_only: false,
+};
+
+window.ForkUWeatherAwareConfig = Object.assign(
+  {},
+  DEFAULT_OVERLAY_CONFIG,
+  window.ForkUWeatherAwareConfig || {}
+);
+window.ForkUWeatherAwareDefaultConfig = DEFAULT_OVERLAY_CONFIG;
+
+try {
+  console.log(
+    '%cFork U – Weather Aware%c Three.js overlay · spatial, theme & mobile aware',
+    'background:#ffcc00;color:#000;font-weight:bold;padding:2px 6px;border-radius:3px 0 0 3px;',
+    'background:#1e1e1e;color:#fff;padding:2px 6px;border-radius:0 3px 3px 0;'
+  );
+} catch (e) {}
