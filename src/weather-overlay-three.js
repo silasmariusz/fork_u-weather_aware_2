@@ -598,6 +598,7 @@ function updateWeather() {
       cloudSpeedMultiplier: cloudSpeedMult,
       auroraOverlay,
       auroraVisibilityScore,
+      auroraVariant: (window.ForkUWeatherAwareConfig || {}).aurora_variant || 'bands',
     });
   }
 }
@@ -680,6 +681,7 @@ function init() {
       cloudSpeedMultiplier: (initCfg.cloud_speed_multiplier != null && !isNaN(parseFloat(initCfg.cloud_speed_multiplier))) ? Math.max(0.1, Math.min(3, parseFloat(initCfg.cloud_speed_multiplier))) : 1,
       auroraOverlay: effect === 'stars' && getAuroraVisibilityScore() > 0,
       auroraVisibilityScore: effect === 'stars' ? getAuroraVisibilityScore() : 0,
+      auroraVariant: (window.ForkUWeatherAwareConfig || {}).aurora_variant || 'bands',
     });
   }
   } catch (err) {

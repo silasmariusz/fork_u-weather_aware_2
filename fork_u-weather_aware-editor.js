@@ -59,6 +59,7 @@
     gaming_matrix_only: false,
     snowy_variant: 'snowy2', // 'snowy' or 'snowy2'
     enable_aurora_effect: true,
+    aurora_variant: 'bands',
     aurora_chance_entity: null,
     aurora_visibility_alert_entity: null,
     aurora_visibility_min: 0.15,
@@ -283,6 +284,7 @@
       set('precipitation_entity', cfg.precipitation_entity);
       set('lightning_counter_entity', cfg.lightning_counter_entity);
       set('lightning_distance_entity', cfg.lightning_distance_entity);
+      set('aurora_variant', cfg.aurora_variant || 'bands');
       set('aurora_chance_entity', cfg.aurora_chance_entity);
       set('aurora_visibility_alert_entity', cfg.aurora_visibility_alert_entity);
       set('aurora_visibility_min', cfg.aurora_visibility_min);
@@ -625,6 +627,13 @@
               <label><input type="checkbox" id="enable_aurora_effect" ${cfg.enable_aurora_effect !== false ? 'checked' : ''}> Enable aurora effect</label>
             </div>
             <div class="form-row">
+              <label>Style</label>
+              <select id="aurora_variant" title="Bands: footer-style header; Northern Gradients: soft flowing curtains">
+                <option value="bands" ${cfg.aurora_variant === 'bands' || !cfg.aurora_variant ? 'selected' : ''}>Bands (header stripes)</option>
+                <option value="northern-gradients" ${cfg.aurora_variant === 'northern-gradients' ? 'selected' : ''}>Bubble Northern Gradients (soft curtains)</option>
+              </select>
+            </div>
+            <div class="form-row">
               <label>Aurora chance entity (%)</label>
               <input id="aurora_chance_entity" type="text" class="entity-select" list="aurora_chance_entity_list" value="${cfg.aurora_chance_entity || ''}" placeholder="sensor.aurora_60_1">
               <datalist id="aurora_chance_entity_list">
@@ -856,6 +865,7 @@
           debug_lightning_counter: root.getElementById('debug_lightning_counter')?.value || null,
           debug_cloud_coverage: root.getElementById('debug_cloud_coverage')?.value || null,
           debug_aurora_score: root.getElementById('debug_aurora_score')?.value || null,
+          aurora_variant: root.getElementById('aurora_variant')?.value || 'bands',
           aurora_chance_entity: root.getElementById('aurora_chance_entity')?.value || null,
           aurora_visibility_alert_entity: root.getElementById('aurora_visibility_alert_entity')?.value || null,
           aurora_visibility_min: parseFloat(root.getElementById('aurora_visibility_min')?.value || '0.15') || 0.15,
@@ -908,7 +918,7 @@
       };
 
       // Use 'change' for text inputs to avoid cursor jumping (config-changed triggers re-render)
-      const textIds = ['weather_entity', 'sun_entity', 'theme_mode', 'moon_phase_entity', 'uv_index_entity', 'moon_position_entity', 'moon_azimuth_entity', 'moon_altitude_entity', 'moon_distance_entity', 'gaming_mode_entity', 'pm25_entity', 'pm4_entity', 'pm10_entity', 'smog_threshold_pm25', 'smog_threshold_pm4', 'smog_threshold_pm10', 'cloud_coverage_entity', 'wind_speed_entity', 'wind_direction_entity', 'precipitation_entity', 'lightning_counter_entity', 'lightning_distance_entity', 'aurora_chance_entity', 'aurora_visibility_alert_entity', 'aurora_visibility_min', 'k_index_entity', 'debug_precipitation', 'debug_wind_speed', 'debug_wind_direction', 'debug_lightning_distance', 'debug_lightning_counter', 'debug_cloud_coverage', 'debug_aurora_score', 'cloud_speed_multiplier', 'drizzle_precipitation_max', 'wind_sway_factor', 'rain_max_tilt_deg', 'rain_wind_min_kmh', 'speed_factor_rain', 'speed_factor_snow', 'speed_factor_clouds', 'speed_factor_fog', 'speed_factor_smog', 'speed_factor_hail', 'speed_factor_lightning', 'speed_factor_stars', 'speed_factor_matrix', 'snowy_variant', 'spatial_mode'];
+      const textIds = ['weather_entity', 'sun_entity', 'theme_mode', 'moon_phase_entity', 'uv_index_entity', 'moon_position_entity', 'moon_azimuth_entity', 'moon_altitude_entity', 'moon_distance_entity', 'gaming_mode_entity', 'pm25_entity', 'pm4_entity', 'pm10_entity', 'smog_threshold_pm25', 'smog_threshold_pm4', 'smog_threshold_pm10', 'cloud_coverage_entity', 'wind_speed_entity', 'wind_direction_entity', 'precipitation_entity', 'lightning_counter_entity', 'lightning_distance_entity', 'aurora_variant', 'aurora_chance_entity', 'aurora_visibility_alert_entity', 'aurora_visibility_min', 'k_index_entity', 'debug_precipitation', 'debug_wind_speed', 'debug_wind_direction', 'debug_lightning_distance', 'debug_lightning_counter', 'debug_cloud_coverage', 'debug_aurora_score', 'cloud_speed_multiplier', 'drizzle_precipitation_max', 'wind_sway_factor', 'rain_max_tilt_deg', 'rain_wind_min_kmh', 'speed_factor_rain', 'speed_factor_snow', 'speed_factor_clouds', 'speed_factor_fog', 'speed_factor_smog', 'speed_factor_hail', 'speed_factor_lightning', 'speed_factor_stars', 'speed_factor_matrix', 'snowy_variant', 'spatial_mode'];
       textIds.forEach(id => {
         const el = root.getElementById(id);
         if (el) el.addEventListener('change', update);

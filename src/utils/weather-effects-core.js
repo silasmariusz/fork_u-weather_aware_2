@@ -166,6 +166,7 @@ export class WeatherEffectsCore {
       this.lastAppliedExtras.cloudSpeedMultiplier !== this.effectExtras.cloudSpeedMultiplier ||
       this.lastAppliedExtras.auroraOverlay !== this.effectExtras.auroraOverlay ||
       this.lastAppliedExtras.auroraVisibilityScore !== this.effectExtras.auroraVisibilityScore ||
+      this.lastAppliedExtras.auroraVariant !== this.effectExtras.auroraVariant ||
       moonChanged ||
       windChanged;
     if (this.currentEffect === effect && this.activeEffect && !extrasChanged) {
@@ -256,8 +257,11 @@ export class WeatherEffectsCore {
   updateAuroraOverlay() {
     const active = this.currentEffect === 'stars' && Boolean(this.effectExtras.auroraOverlay);
     const visibilityScore = Math.max(0, Math.min(1, this.effectExtras.auroraVisibilityScore ?? 0));
-    if (active && !this.auroraOverlay) {
-      this.auroraOverlay = createAuroraOverlay(this, visibilityScore);
+    const variant = this.effectExtras.auroraVariant || 'bands';
+    const needsRecreate = this.auroraOverlay && this.lastAppliedExtras.auroraVariant !== variant;
+    if (active && (!this.auroraOverlay || needsRecreate)) {
+      if (this.auroraOverlay) this.disposeAuroraOverlay();
+      this.auroraOverlay = createAuroraOverlay(this, visibilityScore, variant);
       this.scene.add(this.auroraOverlay.group);
     } else if (!active && this.auroraOverlay) {
       this.disposeAuroraOverlay();
@@ -1214,6 +1218,93 @@ function createSmogOverlay(core) {
   };
 }
 
+function createAuroraNorthernGradients(core, visibilityScore) {
+  const viewW = core.viewWidth;
+  const viewH = core.viewHeight;
+  const geo = new THREE.PlaneGeometry(viewW * 1.2, viewH * 1.2);
+  const uniforms = {
+    uTime: { value: 0 },
+    uOpacity: { value: 0.5 * (visibilityScore || 0.5) * (core.opacity / 100) },
+    uResolution: { value: new THREE.Vector2(viewW, viewH) },
+  };
+  const mat = new THREE.ShaderMaterial({
+    uniforms,
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      varying vec2 vUv;
+      uniform float uTime;
+      uniform float uOpacity;
+      uniform vec2 uResolution;
+      float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float noise(vec2 p) {
+        vec2 i = floor(p); vec2 f = fract(p);
+        vec2 u = f * f * (3.0 - 2.0 * f);
+        return mix(mix(hash(i), hash(i+vec2(1,0)), u.x), mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), u.x), u.y);
+      }
+      float fbm(vec2 p) {
+        float v = 0.0, amp = 0.5;
+        for (int i = 0; i < 4; i++) { v += amp * noise(p); p *= 2.0; amp *= 0.5; }
+        return v;
+      }
+      void main() {
+        vec2 uv = vUv;
+        float t = uv.x * 0.6 + uv.y * 0.4 + uTime * 0.012;
+        float n = fbm(uv * 3.0 + uTime * 0.03);
+        t = fract(t + n * 0.15);
+        vec3 col;
+        if (t < 0.2) col = mix(vec3(0.38, 0.65, 0.98), vec3(0.91, 0.47, 0.98), t * 5.0);
+        else if (t < 0.4) col = mix(vec3(0.91, 0.47, 0.98), vec3(0.38, 0.65, 0.98), (t - 0.2) * 5.0);
+        else if (t < 0.6) col = mix(vec3(0.38, 0.65, 0.98), vec3(0.37, 0.92, 0.83), (t - 0.4) * 5.0);
+        else if (t < 0.8) col = mix(vec3(0.37, 0.92, 0.83), vec3(0.38, 0.65, 0.98), (t - 0.6) * 5.0);
+        else col = mix(vec3(0.38, 0.65, 0.98), vec3(0.91, 0.47, 0.98), (t - 0.8) * 5.0);
+        vec2 fromTopRight = uv - vec2(1.0, 0.0);
+        float dist = length(fromTopRight) * 1.4;
+        float mask = 1.0 - smoothstep(0.3, 1.0, dist);
+        float alpha = mask * uOpacity * (0.9 + 0.1 * n);
+        gl_FragColor = vec4(col, alpha);
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(0, 0, -9);
+  mesh.renderOrder = 9;
+  const group = new THREE.Group();
+  group.add(mesh);
+
+  let currentVisibilityScore = visibilityScore || 0.5;
+  const applyOpacity = () => {
+    const base = 0.5 * currentVisibilityScore * Math.max(0, Math.min(1, core.opacity / 100));
+    uniforms.uOpacity.value = base;
+  };
+
+  return {
+    group,
+    update(delta) {
+      uniforms.uTime.value += delta;
+    },
+    setOpacity() {
+      applyOpacity();
+    },
+    setVisibilityScore(score) {
+      currentVisibilityScore = score || 0.5;
+      applyOpacity();
+    },
+    dispose() {
+      geo.dispose();
+      mat.dispose();
+    },
+  };
+}
+
 const AURORA_BANDS = [
   { width: 1, colorA: [71 / 255, 60 / 255, 120 / 255], colorB: [247 / 255, 42 / 255, 59 / 255], speed: 1.26 },
   { width: 0.9, colorA: [24 / 255, 196 / 255, 153 / 255], colorB: [216 / 255, 240 / 255, 94 / 255], speed: 1.57 },
@@ -1222,7 +1313,10 @@ const AURORA_BANDS = [
   { width: 0.6, colorA: [66 / 255, 242 / 255, 161 / 255], colorB: [244 / 255, 246 / 255, 173 / 255], speed: 6.28 },
 ];
 
-function createAuroraOverlay(core, visibilityScore) {
+function createAuroraOverlay(core, visibilityScore, variant) {
+  if (variant === 'northern-gradients') {
+    return createAuroraNorthernGradients(core, visibilityScore);
+  }
   const viewW = core.viewWidth;
   const viewH = core.viewHeight;
   const topY = viewH / 2 - 2;

@@ -69,6 +69,7 @@ const DEFAULT_OVERLAY_CONFIG = {
   gaming_matrix_only: false,
   snowy_variant: 'snowy2',
   enable_aurora_effect: true,
+  aurora_variant: 'bands', // 'bands' | 'northern-gradients' (Bubble Northern Gradients style)
   aurora_chance_entity: null,
   aurora_visibility_alert_entity: null,
   aurora_visibility_min: 0.15,

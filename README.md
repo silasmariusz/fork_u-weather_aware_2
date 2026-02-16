@@ -267,7 +267,7 @@ These are optional but unlock more advanced behaviour:
 - **Gaming mode** (`input_boolean` or `binary_sensor`) – when ON, displays a Matrix‑style cyberpunk overlay (falling characters).
 - **Smog alert** – when PM2.5 or PM4 (µg/m³) exceed thresholds, fog rises from the bottom. Uses Google Air Quality API sensors. PM4 is important for Cystic Fibrosis awareness. Effect is drawn on top of all others, does not block clicks.
 - **Lightning data** – distance and strike count for timed strobes and distance‑based strength.
-- **Aurora (Northern Lights)** – on **clear-night**, colored bands in the header when visibility score exceeds threshold. Uses NOAA Aurora Forecast (`aurora_chance_entity`), optional `aurora_visibility_alert_entity`, `cloud_coverage_entity`, `sun_entity`, and optionally `k_index_entity` (planetary Kp from NOAA Space Weather). Visibility Score = Aurora Chance × Sky Clarity × Darkness Factor × (optional K-index boost).
+- **Aurora (Northern Lights)** – on **clear-night**, aurora in the header when visibility score exceeds threshold. Two styles: **Bands** (colored header stripes) or **Bubble Northern Gradients** (soft flowing curtains, [CodePen inspiration](https://codepen.io/silasmariusz/pen/YPWMMow)). Uses NOAA Aurora Forecast (`aurora_chance_entity`), optional `aurora_visibility_alert_entity`, `cloud_coverage_entity`, `sun_entity`, and optionally `k_index_entity` (planetary Kp). Visibility Score = Aurora Chance × Sky Clarity × Darkness Factor × (optional K-index boost).
 
 ### Sensors and their impact
 
@@ -283,7 +283,8 @@ These are optional but unlock more advanced behaviour:
 | `uv_index_entity` | Sun glow color (6+ → orange) |
 | `pm25_entity`, `pm4_entity`, `pm10_entity` | Smog fog when above thresholds |
 | `lightning_counter_entity`, `lightning_distance_entity` | Lightning flash timing & distance |
-| `aurora_chance_entity` | Aurora visibility chance (0–100%), header bands on clear-night |
+| `aurora_chance_entity` | Aurora visibility chance (0–100%), header effect on clear-night |
+| `aurora_variant` | `bands` (stripes) or `northern-gradients` (Bubble Northern Gradients) |
 | `aurora_visibility_alert_entity` | Optional shortcut: ON = high chance |
 | `k_index_entity` | Planetary Kp (0–9), boosts aurora intensity; use `sensor.planetary_k_index` from NOAA Space Weather for Europe/Poland |
 
@@ -329,8 +330,9 @@ precipitation_entity: sensor.precipitation
 lightning_counter_entity: sensor.lightning_strikes
 lightning_distance_entity: sensor.lightning_distance
 
-# Aurora (clear-night header bands – NOAA Aurora + optional K-index)
+# Aurora (clear-night – NOAA Aurora + optional K-index)
 enable_aurora_effect: true
+aurora_variant: northern-gradients  # bands | northern-gradients (Bubble Northern Gradients)
 aurora_chance_entity: sensor.aurora_60_1
 aurora_visibility_alert_entity: binary_sensor.aurora_visibility_alert
 aurora_visibility_min: 0.15
