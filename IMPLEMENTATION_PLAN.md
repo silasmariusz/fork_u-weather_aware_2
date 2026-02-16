@@ -106,6 +106,20 @@
 - `binary_sensor.aurora_visibility_alert` – on = high chance (optional shortcut)
 - Updates roughly every ~5 min
 
+### NOAA Space Weather (recommended for K-index)
+
+**Yes – useful.** Especially **Planetary K-index** – global, works for Poland, Europe, worldwide.
+
+| Sensor | Use for aurora |
+|--------|----------------|
+| `sensor.planetary_k_index` | **Primary** – global Kp (0–9); intensity boost for Visibility Score. Works everywhere. |
+| `sensor.a_index` | Optional – predicted geomagnetic activity |
+| `sensor.solar_flux_index` | Optional – solar activity context |
+| `sensor.x_class_1_day_probability` / `sensor.m_class_1_day_probability` | Optional – flare probability (flares → storms → aurora) |
+| `sensor.ssn` (sunspot number) | Optional – long‑term solar context |
+
+**Config:** `k_index_entity` → `sensor.planetary_k_index` (from NOAA Space Weather HACS integration). This is the preferred source for Europe/Poland.
+
 ### Display logic (Visibility Score)
 
 **Formula:**
@@ -134,19 +148,27 @@ const visibilityScore = auroraChance * skyClarity * darkness;
 - `aurora_chance_entity` – sensor (e.g. `sensor.aurora_60_1`, `sensor.aurora_visibility`)
 - `aurora_visibility_alert_entity` – binary_sensor (optional shortcut)
 - `aurora_visibility_min` – min Visibility Score 0–1 (default 0.15)
+- `k_index_entity` – (optional) K-index 0–9; prefer `sensor.planetary_k_index` (NOAA Space Weather) – global, works in Poland/Europe
 - `cloud_coverage_entity` – already exists, used for Sky Clarity
 - `sun_entity` – already exists, used for Darkness Factor
 - `enable_aurora_effect` – enable/disable
 
-### Optional: AUS DOM Space Weather
+### Optional: BOM Space Weather & K-index
 
-For regions where auroras are rarer (photography vs observation):
+[BOM Space Weather API](https://sws-data.sws.bom.gov.au/) and similar sources provide indices useful for aurora intensity:
 
-- `sensor.k_index_<location>` – K-index (0–9), useful for activity assessment
-- `binary_sensor.aurora_alert`, `aurora_watch`, `aurora_outlook`
-- `sensor.dst_index` – Dst (magnetic storms)
+| Entity / source | Description |
+|-----------------|-------------|
+| `k_index_entity` (optional) | K-index 0–9 – geomagnetic activity; higher = stronger aurora |
+| `dst_index_entity` | Dst – magnetic storm strength (negative = storm) |
+| BOM `get-aurora-alert`, `get-aurora-watch`, `get-aurora-outlook` | Aurora notices – can map to `binary_sensor` via REST/custom integration |
 
-**Decision:** NOAA sensors suffice for start. AUS DOM can be added later as an extension.
+**K-index geographic note:** BOM K-index is for the **Australian region**. For **Europe (e.g. Poland)**, prefer:
+- **Planetary Kp** (NOAA) – global, good for all mid-latitudes
+- European observatory K (e.g. Niemegk)
+- Use Australian K only as a fallback; it still reflects global geomagnetic activity, but local sources are more accurate.
+
+**Config:** `k_index_entity` is **optional**. If provided, it can boost Visibility Score (e.g. `× (1 + 0.05 * kIndex)`); if omitted, formula uses only Aurora Chance × Sky Clarity × Darkness.
 
 ### Effect implementation
 

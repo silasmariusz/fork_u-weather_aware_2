@@ -325,6 +325,64 @@ function getPrecipitationMultiplier() {
   return Math.max(0.2, Math.min(1.5, 0.2 + (v / 10)));
 }
 
+function getAuroraChance() {
+  const cfg = window.ForkUWeatherAwareConfig || {};
+  const ha = getHomeAssistant();
+  if (!ha?.hass?.states) return 0;
+  const eid = cfg.aurora_chance_entity;
+  if (!eid) return 0;
+  const e = ha.hass.states[eid];
+  if (!e?.state || e.state === 'unavailable' || e.state === 'unknown') return 0;
+  const v = parseFloat(e.state);
+  return isNaN(v) ? 0 : Math.max(0, Math.min(100, v)) / 100;
+}
+
+function getKIndex() {
+  const cfg = window.ForkUWeatherAwareConfig || {};
+  const ha = getHomeAssistant();
+  if (!ha?.hass?.states) return null;
+  const eid = cfg.k_index_entity;
+  if (!eid) return null;
+  const e = ha.hass.states[eid];
+  if (!e?.state || e.state === 'unavailable' || e.state === 'unknown') return null;
+  const v = parseFloat(e.state);
+  return isNaN(v) ? null : Math.max(0, Math.min(9, v));
+}
+
+function isAuroraVisibilityAlertActive() {
+  const cfg = window.ForkUWeatherAwareConfig || {};
+  const eid = cfg.aurora_visibility_alert_entity;
+  if (!eid) return false;
+  const ha = getHomeAssistant();
+  if (!ha?.hass?.states) return false;
+  const e = ha.hass.states[eid];
+  return !!(e && String(e.state).toLowerCase() === 'on');
+}
+
+function getAuroraVisibilityScore() {
+  const cfg = window.ForkUWeatherAwareConfig || {};
+  if (!isEffectEnabled('enable_aurora_effect')) return 0;
+  if (cfg.development_mode && cfg.debug_aurora_score != null && String(cfg.debug_aurora_score).trim() !== '') {
+    const v = parseFloat(cfg.debug_aurora_score);
+    if (!isNaN(v)) return Math.max(0, Math.min(1, v));
+  }
+  const auroraChance = getAuroraChance() || (isAuroraVisibilityAlertActive() ? 0.7 : 0);
+  const cloudCoverage = getCloudCoverage();
+  const skyClarity = 1 - ((cloudCoverage ?? 50) / 100);
+  const sunPos = getSunPosition();
+  const elevation = sunPos?.elevation ?? 0;
+  const darkness = Math.max(0, Math.min(1, 1 - (elevation + 6) / 6));
+  let score = auroraChance * skyClarity * darkness;
+  const kIndex = getKIndex();
+  if (kIndex != null && kIndex >= 0) {
+    score *= Math.min(1.5, 1 + 0.05 * kIndex);
+  }
+  const minScore = (cfg.aurora_visibility_min != null && !isNaN(parseFloat(cfg.aurora_visibility_min)))
+    ? Math.max(0, Math.min(1, parseFloat(cfg.aurora_visibility_min)))
+    : 0.15;
+  return score >= minScore ? score : 0;
+}
+
 function getThemeMode() {
   const cfg = window.ForkUWeatherAwareConfig || {};
   if (cfg.theme_mode === 'dark' || cfg.theme_mode === 'light') return cfg.theme_mode;
@@ -497,6 +555,8 @@ function updateWeather() {
 
   const smogActive = isEffectEnabled('enable_smog_effect') && isSmogAlertActive();
   const moonPosition = effect === 'stars' && isEffectEnabled('enable_moon_glow') ? getMoonPosition() : null;
+  const auroraVisibilityScore = effect === 'stars' ? getAuroraVisibilityScore() : 0;
+  const auroraOverlay = effect === 'stars' && auroraVisibilityScore > 0;
   const rainEffects = ['rain', 'rain_storm', 'rain_drizzle', 'snow_storm'];
   const windowDroplets = rainEffects.includes(effect) && isEffectEnabled('enable_window_droplets');
   const spatialMode = (window.ForkUWeatherAwareConfig || {}).spatial_mode || 'foreground';
@@ -536,6 +596,8 @@ function updateWeather() {
       precipitationMultiplier,
       themeMode,
       cloudSpeedMultiplier: cloudSpeedMult,
+      auroraOverlay,
+      auroraVisibilityScore,
     });
   }
 }
@@ -583,6 +645,8 @@ function init() {
       currentWeather = weather;
     const smogActive = isEffectEnabled('enable_smog_effect') && isSmogAlertActive();
     const moonPosition = effect === 'stars' && isEffectEnabled('enable_moon_glow') ? getMoonPosition() : null;
+    const auroraVisibilityScore = effect === 'stars' ? getAuroraVisibilityScore() : 0;
+    const auroraOverlay = effect === 'stars' && auroraVisibilityScore > 0;
     const rainEffects = ['rain', 'rain_storm', 'rain_drizzle', 'snow_storm'];
     const windowDroplets = rainEffects.includes(effect) && isEffectEnabled('enable_window_droplets');
     const spatialMode = (window.ForkUWeatherAwareConfig || {}).spatial_mode || 'foreground';
@@ -614,6 +678,8 @@ function init() {
       precipitationMultiplier: getPrecipitationMultiplier(),
       themeMode: getThemeMode(),
       cloudSpeedMultiplier: (initCfg.cloud_speed_multiplier != null && !isNaN(parseFloat(initCfg.cloud_speed_multiplier))) ? Math.max(0.1, Math.min(3, parseFloat(initCfg.cloud_speed_multiplier))) : 1,
+      auroraOverlay: effect === 'stars' && getAuroraVisibilityScore() > 0,
+      auroraVisibilityScore: effect === 'stars' ? getAuroraVisibilityScore() : 0,
     });
   }
   } catch (err) {

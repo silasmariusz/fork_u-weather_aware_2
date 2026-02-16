@@ -57,7 +57,13 @@
     mobile_smog_simple: false,
     mobile_30fps: false,
     gaming_matrix_only: false,
-    snowy_variant: 'snowy2' // 'snowy' or 'snowy2'
+    snowy_variant: 'snowy2', // 'snowy' or 'snowy2'
+    enable_aurora_effect: true,
+    aurora_chance_entity: null,
+    aurora_visibility_alert_entity: null,
+    aurora_visibility_min: 0.15,
+    k_index_entity: null,
+    debug_aurora_score: null
   };
 
   class ForkUWeatherAwareCard extends HTMLElement {
@@ -229,7 +235,10 @@
         { id: 'pm10_entity', domains: ['sensor'] },
         { id: 'gaming_mode_entity', domains: ['input_boolean', 'binary_sensor'] },
         { id: 'lightning_counter_entity', domains: ['sensor'] },
-        { id: 'lightning_distance_entity', domains: ['sensor'] }
+        { id: 'lightning_distance_entity', domains: ['sensor'] },
+        { id: 'aurora_chance_entity', domains: ['sensor'] },
+        { id: 'aurora_visibility_alert_entity', domains: ['binary_sensor'] },
+        { id: 'k_index_entity', domains: ['sensor'] }
       ];
       entitySelects.forEach(({ id, domains }) => {
         const list = root.getElementById(id + '_list');
@@ -274,6 +283,12 @@
       set('precipitation_entity', cfg.precipitation_entity);
       set('lightning_counter_entity', cfg.lightning_counter_entity);
       set('lightning_distance_entity', cfg.lightning_distance_entity);
+      set('aurora_chance_entity', cfg.aurora_chance_entity);
+      set('aurora_visibility_alert_entity', cfg.aurora_visibility_alert_entity);
+      set('aurora_visibility_min', cfg.aurora_visibility_min);
+      set('k_index_entity', cfg.k_index_entity);
+      set('enable_aurora_effect', cfg.enable_aurora_effect);
+      set('debug_aurora_score', cfg.debug_aurora_score);
       set('cloud_speed_multiplier', cfg.cloud_speed_multiplier);
       set('wind_sway_factor', cfg.wind_sway_factor);
       set('rain_max_tilt_deg', cfg.rain_max_tilt_deg);
@@ -602,6 +617,45 @@
             </div>
           </ha-expansion-panel>
           <ha-expansion-panel outlined>
+            <h4 slot="header"><ha-icon icon="mdi:northern-lights"></ha-icon> Aurora (Northern Lights)</h4>
+            <div class="content">
+          <div class="section">
+            <div class="section-title">Aurora effect on clear nights – header bands when visibility score &gt; threshold</div>
+            <div class="form-row">
+              <label><input type="checkbox" id="enable_aurora_effect" ${cfg.enable_aurora_effect !== false ? 'checked' : ''}> Enable aurora effect</label>
+            </div>
+            <div class="form-row">
+              <label>Aurora chance entity (%)</label>
+              <input id="aurora_chance_entity" type="text" class="entity-select" list="aurora_chance_entity_list" value="${cfg.aurora_chance_entity || ''}" placeholder="sensor.aurora_60_1">
+              <datalist id="aurora_chance_entity_list">
+                ${sensorOpts(cfg.aurora_chance_entity).map(o => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join('')}
+              </datalist>
+              <span class="help">NOAA Aurora Forecast 0–100</span>
+            </div>
+            <div class="form-row">
+              <label>Aurora alert (binary)</label>
+              <input id="aurora_visibility_alert_entity" type="text" class="entity-select" list="aurora_visibility_alert_entity_list" value="${cfg.aurora_visibility_alert_entity || ''}" placeholder="binary_sensor.aurora_visibility_alert">
+              <datalist id="aurora_visibility_alert_entity_list">
+                ${getEntityOptions(hass, ['binary_sensor'], cfg.aurora_visibility_alert_entity).map(o => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join('')}
+              </datalist>
+              <span class="help">Optional shortcut when ON</span>
+            </div>
+            <div class="form-row">
+              <label>K-index (optional)</label>
+              <input id="k_index_entity" type="text" class="entity-select" list="k_index_entity_list" value="${cfg.k_index_entity || ''}" placeholder="sensor.planetary_k_index">
+              <datalist id="k_index_entity_list">
+                ${sensorOpts(cfg.k_index_entity).map(o => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join('')}
+              </datalist>
+              <span class="help">Planetary Kp from NOAA Space Weather</span>
+            </div>
+            <div class="form-row">
+              <label>Min visibility score (0–1)</label>
+              <input type="number" id="aurora_visibility_min" value="${cfg.aurora_visibility_min ?? 0.15}" min="0" max="1" step="0.05" style="width:72px" title="Minimum score to show effect (default 0.15)">
+            </div>
+          </div>
+            </div>
+          </ha-expansion-panel>
+          <ha-expansion-panel outlined>
             <h4 slot="header"><ha-icon icon="mdi:blur"></ha-icon> Smog (PM µg/m³ – fog above threshold)</h4>
             <div class="content">
           <div class="section">
@@ -752,6 +806,10 @@
               <label>Cloud coverage (%)</label>
               <input type="number" id="debug_cloud_coverage" value="${cfg.debug_cloud_coverage ?? ''}" placeholder="0-100" min="0" max="100" style="width:80px">
             </div>
+            <div class="form-row">
+              <label>Aurora visibility score (0–1)</label>
+              <input type="number" id="debug_aurora_score" value="${cfg.debug_aurora_score ?? ''}" placeholder="force aurora" min="0" max="1" step="0.1" style="width:80px" title="Force aurora effect in dev mode">
+            </div>
             ` : ''}
           </div>
             </div>
@@ -797,6 +855,12 @@
           debug_lightning_distance: root.getElementById('debug_lightning_distance')?.value || null,
           debug_lightning_counter: root.getElementById('debug_lightning_counter')?.value || null,
           debug_cloud_coverage: root.getElementById('debug_cloud_coverage')?.value || null,
+          debug_aurora_score: root.getElementById('debug_aurora_score')?.value || null,
+          aurora_chance_entity: root.getElementById('aurora_chance_entity')?.value || null,
+          aurora_visibility_alert_entity: root.getElementById('aurora_visibility_alert_entity')?.value || null,
+          aurora_visibility_min: parseFloat(root.getElementById('aurora_visibility_min')?.value || '0.15') || 0.15,
+          k_index_entity: root.getElementById('k_index_entity')?.value || null,
+          enable_aurora_effect: !!root.getElementById('enable_aurora_effect')?.checked,
           cloud_speed_multiplier: parseFloat(root.getElementById('cloud_speed_multiplier')?.value || '1') || 1,
           drizzle_precipitation_max: parseFloat(root.getElementById('drizzle_precipitation_max')?.value || '2.5') || 2.5,
           wind_sway_factor: parseFloat(root.getElementById('wind_sway_factor')?.value || '0.7') || 0.7,
@@ -844,13 +908,13 @@
       };
 
       // Use 'change' for text inputs to avoid cursor jumping (config-changed triggers re-render)
-      const textIds = ['weather_entity', 'sun_entity', 'theme_mode', 'moon_phase_entity', 'uv_index_entity', 'moon_position_entity', 'moon_azimuth_entity', 'moon_altitude_entity', 'moon_distance_entity', 'gaming_mode_entity', 'pm25_entity', 'pm4_entity', 'pm10_entity', 'smog_threshold_pm25', 'smog_threshold_pm4', 'smog_threshold_pm10', 'cloud_coverage_entity', 'wind_speed_entity', 'wind_direction_entity', 'precipitation_entity', 'lightning_counter_entity', 'lightning_distance_entity', 'debug_precipitation', 'debug_wind_speed', 'debug_wind_direction', 'debug_lightning_distance', 'debug_lightning_counter', 'debug_cloud_coverage', 'cloud_speed_multiplier', 'drizzle_precipitation_max', 'wind_sway_factor', 'rain_max_tilt_deg', 'rain_wind_min_kmh', 'speed_factor_rain', 'speed_factor_snow', 'speed_factor_clouds', 'speed_factor_fog', 'speed_factor_smog', 'speed_factor_hail', 'speed_factor_lightning', 'speed_factor_stars', 'speed_factor_matrix', 'snowy_variant', 'spatial_mode'];
+      const textIds = ['weather_entity', 'sun_entity', 'theme_mode', 'moon_phase_entity', 'uv_index_entity', 'moon_position_entity', 'moon_azimuth_entity', 'moon_altitude_entity', 'moon_distance_entity', 'gaming_mode_entity', 'pm25_entity', 'pm4_entity', 'pm10_entity', 'smog_threshold_pm25', 'smog_threshold_pm4', 'smog_threshold_pm10', 'cloud_coverage_entity', 'wind_speed_entity', 'wind_direction_entity', 'precipitation_entity', 'lightning_counter_entity', 'lightning_distance_entity', 'aurora_chance_entity', 'aurora_visibility_alert_entity', 'aurora_visibility_min', 'k_index_entity', 'debug_precipitation', 'debug_wind_speed', 'debug_wind_direction', 'debug_lightning_distance', 'debug_lightning_counter', 'debug_cloud_coverage', 'debug_aurora_score', 'cloud_speed_multiplier', 'drizzle_precipitation_max', 'wind_sway_factor', 'rain_max_tilt_deg', 'rain_wind_min_kmh', 'speed_factor_rain', 'speed_factor_snow', 'speed_factor_clouds', 'speed_factor_fog', 'speed_factor_smog', 'speed_factor_hail', 'speed_factor_lightning', 'speed_factor_stars', 'speed_factor_matrix', 'snowy_variant', 'spatial_mode'];
       textIds.forEach(id => {
         const el = root.getElementById(id);
         if (el) el.addEventListener('change', update);
       });
       // Checkboxes fire 'change' on toggle
-      ['enabled', 'development_mode', 'mobile_limit_dpr', 'mobile_reduce_particles', 'mobile_snowy2_light', 'mobile_smog_simple', 'mobile_30fps', 'gaming_matrix_only', 'enable_rain', 'enable_snow', 'enable_clouds', 'enable_fog', 'enable_smog_effect', 'enable_sun_glow', 'enable_moon_glow', 'enable_stars', 'enable_hail', 'enable_lightning_effect', 'enable_matrix', 'enable_window_droplets', 'stars_require_moon'].forEach(id => {
+      ['enabled', 'development_mode', 'mobile_limit_dpr', 'mobile_reduce_particles', 'mobile_snowy2_light', 'mobile_smog_simple', 'mobile_30fps', 'gaming_matrix_only', 'enable_rain', 'enable_snow', 'enable_clouds', 'enable_fog', 'enable_smog_effect', 'enable_sun_glow', 'enable_moon_glow', 'enable_stars', 'enable_hail', 'enable_lightning_effect', 'enable_matrix', 'enable_window_droplets', 'stars_require_moon', 'enable_aurora_effect'].forEach(id => {
         const el = root.getElementById(id);
         if (el) el.addEventListener('change', update);
       });

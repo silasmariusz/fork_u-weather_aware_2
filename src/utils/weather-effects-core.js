@@ -111,6 +111,7 @@ export class WeatherEffectsCore {
     this.smogOverlay = null;
     this.windowDropletsOverlay = null;
     this.lightningOverlay = null;
+    this.auroraOverlay = null;
     this.renderTarget = null;
     this.maskScene = null;
     this.maskCamera = null;
@@ -163,6 +164,8 @@ export class WeatherEffectsCore {
       this.lastAppliedExtras.cloudCoverage !== this.effectExtras.cloudCoverage ||
       this.lastAppliedExtras.themeMode !== this.effectExtras.themeMode ||
       this.lastAppliedExtras.cloudSpeedMultiplier !== this.effectExtras.cloudSpeedMultiplier ||
+      this.lastAppliedExtras.auroraOverlay !== this.effectExtras.auroraOverlay ||
+      this.lastAppliedExtras.auroraVisibilityScore !== this.effectExtras.auroraVisibilityScore ||
       moonChanged ||
       windChanged;
     if (this.currentEffect === effect && this.activeEffect && !extrasChanged) {
@@ -170,6 +173,7 @@ export class WeatherEffectsCore {
       this.updateSmogOverlay();
       this.updateWindowDropletsOverlay();
       this.updateLightningOverlay();
+      this.updateAuroraOverlay();
       this.startLoop();
       return;
     }
@@ -180,6 +184,7 @@ export class WeatherEffectsCore {
     this.disposeSmogOverlay();
     this.disposeWindowDropletsOverlay();
     this.disposeLightningOverlay();
+    this.disposeAuroraOverlay();
     this.disposeActiveEffect();
     this.currentEffect = 'none';
     this.stopLoop();
@@ -246,6 +251,27 @@ export class WeatherEffectsCore {
     this.scene.remove(this.lightningOverlay.group);
     this.lightningOverlay.dispose();
     this.lightningOverlay = null;
+  }
+
+  updateAuroraOverlay() {
+    const active = this.currentEffect === 'stars' && Boolean(this.effectExtras.auroraOverlay);
+    const visibilityScore = Math.max(0, Math.min(1, this.effectExtras.auroraVisibilityScore ?? 0));
+    if (active && !this.auroraOverlay) {
+      this.auroraOverlay = createAuroraOverlay(this, visibilityScore);
+      this.scene.add(this.auroraOverlay.group);
+    } else if (!active && this.auroraOverlay) {
+      this.disposeAuroraOverlay();
+    } else if (this.auroraOverlay) {
+      this.auroraOverlay.setOpacity(this.opacity);
+      this.auroraOverlay.setVisibilityScore?.(visibilityScore);
+    }
+  }
+
+  disposeAuroraOverlay() {
+    if (!this.auroraOverlay) return;
+    this.scene.remove(this.auroraOverlay.group);
+    this.auroraOverlay.dispose();
+    this.auroraOverlay = null;
   }
 
   setOpacity(opacity) {
@@ -319,6 +345,7 @@ export class WeatherEffectsCore {
     this.smogOverlay?.update(delta);
     this.windowDropletsOverlay?.update(delta);
     this.lightningOverlay?.update(delta, timestamp / 1000, this.effectExtras);
+    this.auroraOverlay?.update(delta);
 
     const useGradientMask = this.effectExtras.spatialMode === 'gradient-mask';
     if (useGradientMask) {
@@ -396,6 +423,7 @@ export class WeatherEffectsCore {
     this.updateSmogOverlay();
     this.updateWindowDropletsOverlay();
     this.updateLightningOverlay();
+    this.updateAuroraOverlay();
     this.startLoop();
   }
 
@@ -1182,6 +1210,103 @@ function createSmogOverlay(core) {
     dispose() {
       geo.dispose();
       mat.dispose();
+    },
+  };
+}
+
+const AURORA_BANDS = [
+  { width: 1, colorA: [71 / 255, 60 / 255, 120 / 255], colorB: [247 / 255, 42 / 255, 59 / 255], speed: 1.26 },
+  { width: 0.9, colorA: [24 / 255, 196 / 255, 153 / 255], colorB: [216 / 255, 240 / 255, 94 / 255], speed: 1.57 },
+  { width: 0.8, colorA: [255 / 255, 221 / 255, 0 / 255], colorB: [62 / 255, 51 / 255, 255 / 255], speed: 2.09 },
+  { width: 0.7, colorA: [120 / 255, 24 / 255, 72 / 255], colorB: [242 / 255, 187 / 255, 233 / 255], speed: 3.14 },
+  { width: 0.6, colorA: [66 / 255, 242 / 255, 161 / 255], colorB: [244 / 255, 246 / 255, 173 / 255], speed: 6.28 },
+];
+
+function createAuroraOverlay(core, visibilityScore) {
+  const viewW = core.viewWidth;
+  const viewH = core.viewHeight;
+  const topY = viewH / 2 - 2;
+  const bandHeight = 5;
+  const group = new THREE.Group();
+
+  const auroraVertexShader = `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `;
+
+  const auroraFragShader = `
+    varying vec2 vUv;
+    uniform float uTime;
+    uniform float uOpacity;
+    uniform vec3 uColorA;
+    uniform vec3 uColorB;
+    uniform float uSpeed;
+    void main() {
+      float t = 0.5 + 0.5 * sin(uTime * uSpeed);
+      vec3 col = mix(uColorA, uColorB, t);
+      float dist = abs(vUv.y - 0.5) * 2.0;
+      float alpha = (1.0 - smoothstep(0.3, 1.0, dist)) * uOpacity;
+      gl_FragColor = vec4(col, alpha);
+    }
+  `;
+
+  for (let i = 0; i < AURORA_BANDS.length; i++) {
+    const band = AURORA_BANDS[i];
+    const w = viewW * band.width;
+    const geo = new THREE.PlaneGeometry(w, bandHeight);
+    const uniforms = {
+      uTime: { value: 0 },
+      uOpacity: { value: 0.4 * (visibilityScore || 0.5) * (core.opacity / 100) },
+      uColorA: { value: new THREE.Vector3().fromArray(band.colorA) },
+      uColorB: { value: new THREE.Vector3().fromArray(band.colorB) },
+      uSpeed: { value: band.speed },
+    };
+    const mat = new THREE.ShaderMaterial({
+      uniforms,
+      vertexShader: auroraVertexShader,
+      fragmentShader: auroraFragShader,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(0, topY - i * (bandHeight + 1), -8);
+    mesh.renderOrder = 9;
+    group.add(mesh);
+  }
+
+  let currentVisibilityScore = visibilityScore || 0.5;
+  const bandMeshes = group.children;
+
+  const applyOpacity = () => {
+    const base = 0.4 * currentVisibilityScore * Math.max(0, Math.min(1, core.opacity / 100));
+    for (const mesh of bandMeshes) {
+      mesh.material.uniforms.uOpacity.value = base;
+    }
+  };
+
+  return {
+    group,
+    update(delta) {
+      for (const mesh of bandMeshes) {
+        mesh.material.uniforms.uTime.value += delta;
+      }
+    },
+    setOpacity() {
+      applyOpacity();
+    },
+    setVisibilityScore(score) {
+      currentVisibilityScore = score || 0.5;
+      applyOpacity();
+    },
+    dispose() {
+      for (const mesh of bandMeshes) {
+        mesh.geometry.dispose();
+        mesh.material.dispose();
+      }
     },
   };
 }

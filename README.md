@@ -267,6 +267,7 @@ These are optional but unlock more advanced behaviour:
 - **Gaming mode** (`input_boolean` or `binary_sensor`) – when ON, displays a Matrix‑style cyberpunk overlay (falling characters).
 - **Smog alert** – when PM2.5 or PM4 (µg/m³) exceed thresholds, fog rises from the bottom. Uses Google Air Quality API sensors. PM4 is important for Cystic Fibrosis awareness. Effect is drawn on top of all others, does not block clicks.
 - **Lightning data** – distance and strike count for timed strobes and distance‑based strength.
+- **Aurora (Northern Lights)** – on **clear-night**, colored bands in the header when visibility score exceeds threshold. Uses NOAA Aurora Forecast (`aurora_chance_entity`), optional `aurora_visibility_alert_entity`, `cloud_coverage_entity`, `sun_entity`, and optionally `k_index_entity` (planetary Kp from NOAA Space Weather). Visibility Score = Aurora Chance × Sky Clarity × Darkness Factor × (optional K-index boost).
 
 Recommended sensors:
 

@@ -68,6 +68,12 @@ const DEFAULT_OVERLAY_CONFIG = {
   mobile_30fps: false,
   gaming_matrix_only: false,
   snowy_variant: 'snowy2',
+  enable_aurora_effect: true,
+  aurora_chance_entity: null,
+  aurora_visibility_alert_entity: null,
+  aurora_visibility_min: 0.15,
+  k_index_entity: null,
+  debug_aurora_score: null,
 };
 
 window.ForkUWeatherAwareConfig = Object.assign(
