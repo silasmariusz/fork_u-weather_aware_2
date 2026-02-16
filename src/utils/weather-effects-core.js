@@ -791,6 +791,8 @@ function createMatrixEffect(ctx) {
 }
 
 function getStarsCount(isMobile) {
+  return isMobile ? Math.floor(400 * 0.6) : Math.floor(400);
+}
 
 function createStarsEffect(ctx) {
   const group = new THREE.Group();
