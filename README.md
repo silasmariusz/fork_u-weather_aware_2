@@ -269,6 +269,82 @@ These are optional but unlock more advanced behaviour:
 - **Lightning data** – distance and strike count for timed strobes and distance‑based strength.
 - **Aurora (Northern Lights)** – on **clear-night**, colored bands in the header when visibility score exceeds threshold. Uses NOAA Aurora Forecast (`aurora_chance_entity`), optional `aurora_visibility_alert_entity`, `cloud_coverage_entity`, `sun_entity`, and optionally `k_index_entity` (planetary Kp from NOAA Space Weather). Visibility Score = Aurora Chance × Sky Clarity × Darkness Factor × (optional K-index boost).
 
+### Sensors and their impact
+
+| Sensor | Effect / use |
+|--------|---------------|
+| `cloud_coverage_entity` | Cloud & fog density (0–100%); aurora sky clarity |
+| `cloud_speed_multiplier` | Cloud animation speed |
+| `precipitation_entity` | Rain speed multiplier (mm/h) |
+| `wind_speed_entity` | Rain/snow tilt, cloud drift |
+| `wind_direction_entity` | Rain/snow bearing, wind sway |
+| `rain_max_tilt_deg` | Max rain tilt from wind (default 30°) |
+| `rain_wind_min_kmh` | Wind speed threshold for tilt (default 3 km/h) |
+| `uv_index_entity` | Sun glow color (6+ → orange) |
+| `pm25_entity`, `pm4_entity`, `pm10_entity` | Smog fog when above thresholds |
+| `lightning_counter_entity`, `lightning_distance_entity` | Lightning flash timing & distance |
+| `aurora_chance_entity` | Aurora visibility chance (0–100%), header bands on clear-night |
+| `aurora_visibility_alert_entity` | Optional shortcut: ON = high chance |
+| `k_index_entity` | Planetary Kp (0–9), boosts aurora intensity; use `sensor.planetary_k_index` from NOAA Space Weather for Europe/Poland |
+
+### Example – Full sensor setup (all optional sensors)
+
+Extended configuration with weather, moon, UV, smog, wind, precipitation, lightning, and aurora sensors. Replace entity IDs with your own.
+
+```yaml
+type: custom:fork-u-weather-aware-card
+enabled: true
+weather_entity: weather.openweathermap
+sun_entity: sun.sun
+
+# Moon & UV (sun position, moon glow, UV sun color)
+moon_phase_entity: sensor.moon_phase
+uv_index_entity: sensor.uv_index
+moon_azimuth_entity: sensor.moon_azimuth
+moon_altitude_entity: sensor.moon_altitude
+moon_distance_entity: sensor.moon_distance
+
+# Gaming / Matrix (when ON → cyberpunk overlay)
+gaming_mode_entity: binary_sensor.gaming_mode
+
+# Smog (PM µg/m³ → fog from bottom when above threshold)
+pm25_entity: sensor.pm25
+pm10_entity: sensor.pm10
+smog_threshold_pm25: 35
+smog_threshold_pm10: 50
+
+# Wind & clouds (direction, tilt, cloud density & speed)
+cloud_coverage_entity: sensor.cloud_coverage
+cloud_speed_multiplier: 1
+wind_speed_entity: sensor.wind_speed
+wind_direction_entity: sensor.wind_direction
+rain_max_tilt_deg: 30
+rain_wind_min_kmh: 3
+wind_sway_factor: 0.7
+
+# Precipitation (rain speed multiplier)
+precipitation_entity: sensor.precipitation
+
+# Lightning (distance & count → flash timing)
+lightning_counter_entity: sensor.lightning_strikes
+lightning_distance_entity: sensor.lightning_distance
+
+# Aurora (clear-night header bands – NOAA Aurora + optional K-index)
+enable_aurora_effect: true
+aurora_chance_entity: sensor.aurora_60_1
+aurora_visibility_alert_entity: binary_sensor.aurora_visibility_alert
+aurora_visibility_min: 0.15
+k_index_entity: sensor.planetary_k_index  # NOAA Space Weather; global, works in Europe/Poland
+
+# Tuning
+theme_mode: null
+drizzle_precipitation_max: 2.5
+snowy_variant: snowy2
+spatial_mode: bubble
+```
+
+**Integrations used in this example:** OpenWeatherMap (weather, clouds, wind, precip), Moon Phase / Moon Astro (moon), NOAA Aurora Forecast (aurora chance), NOAA Space Weather (planetary K-index), Google Air Quality or similar (PM sensors), DOM or Blitzortung (lightning).
+
 Recommended sensors:
 
 - **Wind direction** and **wind speed** – for cloud/particle direction and intensity.
