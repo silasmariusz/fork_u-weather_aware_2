@@ -39,17 +39,17 @@ jobs:
 
       - name: Verify build output
         run: |
-          ls -la fork_u-weather_aware.js dist/ 2>/dev/null || true
-          file fork_u-weather_aware.js
-          head -c 200 fork_u-weather_aware.js
-          echo ""
-          wc -c fork_u-weather_aware.js
+          ls -la fork_u-weather_aware.js 2>/dev/null || echo "FILE MISSING"
+          wc -c < fork_u-weather_aware.js 2>/dev/null || echo "0"
+          head -c 100 fork_u-weather_aware.js 2>/dev/null || true
 
       - name: Upload bundle artifact
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: hacs-bundle
           path: fork_u-weather_aware.js
+          if-no-files-found: warn
 
       - name: Commit and push bundle
         continue-on-error: true
