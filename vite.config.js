@@ -17,11 +17,7 @@ export default defineConfig({
       },
     },
     target: 'es2020',
-    minify: 'terser',
-    terserOptions: {
-      compress: { passes: 1 },
-      mangle: true,
-    },
+    minify: 'esbuild',
   },
   worker: {
     format: 'iife',
