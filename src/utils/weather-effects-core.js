@@ -830,10 +830,10 @@ function createStarsEffect(ctx) {
   if (moonPos && typeof moonPos.x === 'number' && typeof moonPos.y === 'number') {
     const mx = (moonPos.x - 0.5) * ctx.viewWidth;
     const my = (0.5 - moonPos.y) * ctx.viewHeight;
-    const moonGeo = new THREE.PlaneGeometry(ctx.viewWidth * 0.15, ctx.viewHeight * 0.12);
+    const moonGeo = new THREE.PlaneGeometry(ctx.viewWidth * 0.28, ctx.viewHeight * 0.22);
     const moonMat = new THREE.ShaderMaterial({
       uniforms: {
-        uOpacity: { value: 0.5 * (ctx.opacity / 100) },
+        uOpacity: { value: 0.55 * (ctx.opacity / 100) },
       },
       vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
       fragmentShader: `
@@ -842,7 +842,9 @@ function createStarsEffect(ctx) {
         void main() {
           vec2 c = vUv - 0.5;
           float d = length(c);
-          float alpha = smoothstep(0.5, 0.2, d) * uOpacity;
+          float core = smoothstep(0.35, 0.0, d);
+          float glow = smoothstep(0.95, 0.25, d);
+          float alpha = mix(glow * 0.5, core, 0.7) * uOpacity;
           gl_FragColor = vec4(0.95, 0.96, 1.0, alpha);
         }
       `,
@@ -923,7 +925,7 @@ function createWindowDropletsOverlay(core) {
   }
 
   function getSpawnInterval() {
-    return (25000 / (2 + Math.random() * 2)) * (1.2 + Math.random() * 0.8);
+    return 2200 + Math.random() * 2800;
   }
 
   return {
@@ -942,7 +944,7 @@ function createWindowDropletsOverlay(core) {
         const leftMax = W * sideZone;
         const rightMin = W * (1 - sideZone);
         const side = Math.random() < 0.5 ? 'left' : 'right';
-        const size = 3 + Math.random() * 5;
+        const size = 4 + Math.random() * 6;
         let x, y;
         let tries = 12;
         do {
@@ -1000,10 +1002,10 @@ function createWindowDropletsOverlay(core) {
             d.x - d.size * 0.3, d.y - d.size * 0.3, 0,
             d.x, d.y, d.size * 1.5
           );
-          grad.addColorStop(0, 'rgba(220, 235, 255, 0.6)');
-          grad.addColorStop(0.4, 'rgba(190, 210, 240, 0.45)');
-          grad.addColorStop(0.8, 'rgba(160, 180, 210, 0.2)');
-          grad.addColorStop(1, 'rgba(140, 160, 190, 0)');
+          grad.addColorStop(0, 'rgba(230, 240, 255, 0.75)');
+          grad.addColorStop(0.35, 'rgba(200, 218, 242, 0.55)');
+          grad.addColorStop(0.7, 'rgba(170, 190, 215, 0.25)');
+          grad.addColorStop(1, 'rgba(150, 170, 195, 0)');
           dropCtx.fillStyle = grad;
           dropCtx.beginPath();
           dropCtx.ellipse(d.x, d.y, d.size * 0.5, d.size * 1.1, 0, 0, Math.PI * 2);
