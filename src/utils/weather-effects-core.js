@@ -313,10 +313,6 @@ export class WeatherEffectsCore {
       this.currentEffect = 'none';
       this.setEffect(effect);
     }
-    this.smogOverlay?.onResize?.(this.viewWidth, this.viewHeight, this.isMobile, this.viewportWidth, this.viewportHeight);
-    this.windowDropletsOverlay?.onResize?.(this.viewWidth, this.viewHeight, this.isMobile, this.viewportWidth, this.viewportHeight);
-    this.lightningOverlay?.onResize?.(this.viewWidth, this.viewHeight, this.isMobile, this.viewportWidth, this.viewportHeight);
-    this.auroraOverlay?.onResize?.(this.viewWidth, this.viewHeight, this.isMobile, this.viewportWidth, this.viewportHeight);
   }
 
   destroy() {
@@ -918,48 +914,10 @@ function createStarsEffect(ctx) {
   const positions = new Float32Array(count * 3);
   const moonPos = ctx.moonPosition;
 
-  // Subtle violet top gradient for clean clear-night sky.
-  const nightGlowGeo = new THREE.PlaneGeometry(ctx.viewWidth, ctx.viewHeight);
-  const nightGlowMat = new THREE.ShaderMaterial({
-    uniforms: {
-      uOpacity: { value: 0.16 * (ctx.opacity / 100) },
-    },
-    vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-    fragmentShader: `
-      varying vec2 vUv;
-      uniform float uOpacity;
-      void main() {
-        float top = smoothstep(0.28, 0.98, vUv.y);
-        float centerSoft = 1.0 - smoothstep(0.0, 0.55, abs(vUv.x - 0.5));
-        float alpha = top * (0.55 + centerSoft * 0.45) * uOpacity;
-        vec3 col = vec3(0.34, 0.30, 0.52);
-        gl_FragColor = vec4(col, alpha);
-      }
-    `,
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.NormalBlending,
-  });
-  const nightGlowMesh = new THREE.Mesh(nightGlowGeo, nightGlowMat);
-  nightGlowMesh.position.set(0, 0, -2.2);
-  nightGlowMesh.renderOrder = -1;
-  group.add(nightGlowMesh);
-
   for (let i = 0; i < count; i++) {
     const i3 = i * 3;
-    // Keep stars mostly near edges so center stays subtle.
-    let x = 0;
-    let y = 0;
-    for (let t = 0; t < 8; t++) {
-      x = THREE.MathUtils.randFloatSpread(ctx.viewWidth + 20);
-      y = THREE.MathUtils.randFloatSpread(ctx.viewHeight + 20);
-      const nx = Math.abs(x) / Math.max(1, (ctx.viewWidth + 20) * 0.5);
-      const ny = Math.abs(y) / Math.max(1, (ctx.viewHeight + 20) * 0.5);
-      const edge = Math.max(nx, ny);
-      if (edge > 0.55 || Math.random() < 0.18) break;
-    }
-    positions[i3] = x;
-    positions[i3 + 1] = y;
+    positions[i3] = THREE.MathUtils.randFloatSpread(ctx.viewWidth + 20);
+    positions[i3 + 1] = THREE.MathUtils.randFloatSpread(ctx.viewHeight + 20);
     positions[i3 + 2] = Math.random() * 2 - 1;
   }
 
@@ -969,9 +927,9 @@ function createStarsEffect(ctx) {
   const mat = new THREE.PointsMaterial({
     map: tex,
     transparent: true,
-    opacity: 0.92 * (ctx.opacity / 100) * starsMult,
+    opacity: 0.85 * (ctx.opacity / 100) * starsMult,
     sizeAttenuation: false,
-    size: 2.2,
+    size: 2,
     color: 0xe8f4ff,
     depthWrite: false,
     depthTest: false,
@@ -983,11 +941,10 @@ function createStarsEffect(ctx) {
   group.add(points);
 
   let moonMesh = null;
-  let moonEdgeGlowMesh = null;
   if (moonPos && typeof moonPos.x === 'number' && typeof moonPos.y === 'number') {
     const mx = (moonPos.x - 0.5) * ctx.viewWidth;
     const my = (0.5 - moonPos.y) * ctx.viewHeight;
-    const moonSize = Math.max(ctx.viewWidth, ctx.viewHeight) * 0.12;
+    const moonSize = Math.max(ctx.viewWidth, ctx.viewHeight) * 0.2;
     const moonGeo = new THREE.PlaneGeometry(moonSize, moonSize);
     const moonMat = new THREE.ShaderMaterial({
       uniforms: {
@@ -1000,10 +957,7 @@ function createStarsEffect(ctx) {
         void main() {
           vec2 c = vUv - 0.5;
           float d = length(c) * 2.0;
-          if (d > 1.0) discard;
-          float core = smoothstep(0.34, 0.0, d);
-          float halo = smoothstep(1.0, 0.12, d);
-          float alpha = (core * 0.78 + halo * 0.22) * uOpacity;
+          float alpha = smoothstep(1.5, 0.1, d) * uOpacity;
           gl_FragColor = vec4(0.96, 0.97, 1.0, alpha);
         }
       `,
@@ -1015,41 +969,6 @@ function createStarsEffect(ctx) {
     moonMesh.position.set(mx, my, -1);
     moonMesh.renderOrder = 1;
     group.add(moonMesh);
-
-    const edgeGeo = new THREE.PlaneGeometry(ctx.viewWidth, ctx.viewHeight);
-    const edgeCenter = { x: moonPos.x, y: moonPos.y };
-    if (edgeCenter.y <= edgeCenter.x && edgeCenter.y <= (1 - edgeCenter.x)) {
-      edgeCenter.y = -0.16;
-    } else if (edgeCenter.x < 0.5) {
-      edgeCenter.x = -0.15;
-    } else {
-      edgeCenter.x = 1.15;
-    }
-    const edgeMat = new THREE.ShaderMaterial({
-      uniforms: {
-        uOpacity: { value: 0.1 * (ctx.opacity / 100) * moonMult },
-        uCenter: { value: new THREE.Vector2(edgeCenter.x, edgeCenter.y) },
-      },
-      vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-      fragmentShader: `
-        varying vec2 vUv;
-        uniform float uOpacity;
-        uniform vec2 uCenter;
-        void main() {
-          float d = length(vUv - uCenter);
-          float glow = smoothstep(0.9, 0.05, d);
-          float alpha = glow * glow * uOpacity;
-          gl_FragColor = vec4(0.82, 0.86, 0.96, alpha);
-        }
-      `,
-      transparent: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    });
-    moonEdgeGlowMesh = new THREE.Mesh(edgeGeo, edgeMat);
-    moonEdgeGlowMesh.position.set(0, 0, -1.8);
-    moonEdgeGlowMesh.renderOrder = 0;
-    group.add(moonEdgeGlowMesh);
   }
 
   let twinkleTime = 0;
@@ -1058,34 +977,24 @@ function createStarsEffect(ctx) {
     group,
     update(delta) {
       twinkleTime += delta * 1.2;
-      mat.opacity = 0.92 * (ctx.opacity / 100) * starsMult * (0.82 + 0.18 * Math.sin(twinkleTime));
+      mat.opacity = 0.85 * (ctx.opacity / 100) * starsMult * (0.8 + 0.2 * Math.sin(twinkleTime));
     },
     setOpacity(v) {
       const n = Math.max(0, Math.min(1, v / 100));
-      mat.opacity = 0.92 * n * starsMult;
+      mat.opacity = 0.85 * n * starsMult;
       if (moonMesh) moonMesh.material.uniforms.uOpacity.value = 0.18 * n * moonMult;
-      if (moonEdgeGlowMesh) moonEdgeGlowMesh.material.uniforms.uOpacity.value = 0.1 * n * moonMult;
-      nightGlowMat.uniforms.uOpacity.value = 0.16 * n;
     },
     onResize(w, h) {
       ctx.viewWidth = w;
       ctx.viewHeight = h;
-      nightGlowMesh.geometry.dispose();
-      nightGlowMesh.geometry = new THREE.PlaneGeometry(w, h);
     },
     dispose() {
       geo.dispose();
       mat.dispose();
       tex.dispose();
-      nightGlowMesh.geometry.dispose();
-      nightGlowMat.dispose();
       if (moonMesh) {
         moonMesh.geometry.dispose();
         moonMesh.material.dispose();
-      }
-      if (moonEdgeGlowMesh) {
-        moonEdgeGlowMesh.geometry.dispose();
-        moonEdgeGlowMesh.material.dispose();
       }
     },
   };
@@ -1131,7 +1040,7 @@ function createWindowDropletsOverlay(core) {
   }
 
   function getSpawnInterval() {
-    return 120 + Math.random() * 220;
+    return 2200 + Math.random() * 2800;
   }
 
   return {
@@ -1144,14 +1053,18 @@ function createWindowDropletsOverlay(core) {
       spawnTimer += dMs;
       if (nextIntervalMs <= 0) nextIntervalMs = getSpawnInterval();
       if (spawnTimer >= nextIntervalMs) {
-        spawnTimer = Math.max(0, spawnTimer - nextIntervalMs);
+        spawnTimer = 0;
         nextIntervalMs = getSpawnInterval();
-        const size = 3.5 + Math.random() * 10;
+        const sideZone = 0.18;
+        const leftMax = W * sideZone;
+        const rightMin = W * (1 - sideZone);
+        const side = Math.random() < 0.5 ? 'left' : 'right';
+        const size = 4 + Math.random() * 6;
         let x, y;
-        let tries = 16;
+        let tries = 12;
         do {
-          x = Math.random() * W;
-          y = Math.random() * H * 0.9;
+          x = side === 'left' ? Math.random() * leftMax : rightMin + Math.random() * (W - rightMin);
+          y = Math.random() * H * 0.55;
         } while (--tries > 0 && dropletOverlaps(x, y, size));
         if (tries > 0) {
           droplets.push({
@@ -1159,11 +1072,10 @@ function createWindowDropletsOverlay(core) {
             phase: 'appear',
             opacity: 0,
             life: 0,
-            appearDur: 140 + Math.random() * 220,
-            restDur: 650 + Math.random() * 1800,
-            slideVel: 10 + Math.random() * 20,
-            slideAccel: 0.7 + Math.random() * 1.2,
-            trailLife: 0,
+            appearDur: 300,
+            restDur: 2000 + Math.random() * 2500,
+            slideVel: 8 + Math.random() * 6,
+            slideAccel: 0.8 + Math.random() * 0.6,
           });
         }
       }
@@ -1190,7 +1102,6 @@ function createWindowDropletsOverlay(core) {
           const dt = dMs / 1000;
           d.slideVel = (d.slideVel || 8) + d.slideAccel * dt * 60;
           d.y += d.slideVel * dt;
-          d.trailLife = Math.min(1, (d.trailLife || 0) + dt * 1.5);
           const frac = d.y / H;
           d.opacity = frac < 0.85 ? 1 : Math.max(0, (1 - frac) / 0.15);
           if (d.y > H + d.size * 2) {
@@ -1202,42 +1113,28 @@ function createWindowDropletsOverlay(core) {
         if (d.y <= H + d.size * 2) {
           dropCtx.save();
           dropCtx.globalAlpha = d.opacity;
-          if (d.phase === 'slide') {
-            const trailLen = d.size * (1.8 + d.slideVel * 0.02) * (0.45 + d.trailLife * 0.55);
-            const trail = dropCtx.createLinearGradient(d.x, d.y - trailLen, d.x, d.y + d.size * 0.3);
-            trail.addColorStop(0, 'rgba(205,220,240,0)');
-            trail.addColorStop(0.4, 'rgba(205,220,240,0.06)');
-            trail.addColorStop(1, 'rgba(215,230,248,0.14)');
-            dropCtx.strokeStyle = trail;
-            dropCtx.lineWidth = Math.max(1, d.size * 0.16);
-            dropCtx.lineCap = 'round';
-            dropCtx.beginPath();
-            dropCtx.moveTo(d.x, d.y - trailLen);
-            dropCtx.lineTo(d.x, d.y + d.size * 0.25);
-            dropCtx.stroke();
-          }
           const grad = dropCtx.createRadialGradient(
             d.x - d.size * 0.3, d.y - d.size * 0.3, 0,
-            d.x, d.y, d.size * 1.65
+            d.x, d.y, d.size * 1.5
           );
-          grad.addColorStop(0, 'rgba(238, 247, 255, 0.28)');
-          grad.addColorStop(0.28, 'rgba(214, 230, 248, 0.16)');
-          grad.addColorStop(0.62, 'rgba(184, 203, 225, 0.08)');
+          grad.addColorStop(0, 'rgba(230, 240, 255, 0.42)');
+          grad.addColorStop(0.4, 'rgba(200, 218, 242, 0.28)');
+          grad.addColorStop(0.75, 'rgba(170, 190, 215, 0.12)');
           grad.addColorStop(1, 'rgba(150, 170, 195, 0)');
           dropCtx.fillStyle = grad;
           dropCtx.beginPath();
-          dropCtx.ellipse(d.x, d.y, d.size * 0.52, d.size * 1.18, 0, 0, Math.PI * 2);
+          dropCtx.ellipse(d.x, d.y, d.size * 0.5, d.size * 1.1, 0, 0, Math.PI * 2);
           dropCtx.fill();
           const hl = dropCtx.createRadialGradient(
             d.x - d.size * 0.25, d.y - d.size * 0.4, 0,
             d.x - d.size * 0.25, d.y - d.size * 0.4, d.size * 0.6
           );
-          hl.addColorStop(0, `rgba(255,255,255,${0.22 * d.opacity})`);
-          hl.addColorStop(0.55, `rgba(255,255,255,${0.06 * d.opacity})`);
+          hl.addColorStop(0, `rgba(255,255,255,${0.32 * d.opacity})`);
+          hl.addColorStop(0.55, `rgba(255,255,255,${0.1 * d.opacity})`);
           hl.addColorStop(1, 'rgba(255,255,255,0)');
           dropCtx.fillStyle = hl;
           dropCtx.beginPath();
-          dropCtx.ellipse(d.x - d.size * 0.23, d.y - d.size * 0.42, d.size * 0.30, d.size * 0.38, 0, 0, Math.PI * 2);
+          dropCtx.ellipse(d.x - d.size * 0.2, d.y - d.size * 0.35, d.size * 0.35, d.size * 0.4, 0, 0, Math.PI * 2);
           dropCtx.fill();
           dropCtx.restore();
         }
@@ -1261,13 +1158,12 @@ function createSmogOverlay(core) {
   const viewW = core.viewWidth;
   const viewH = core.viewHeight;
   const smogMult = core.effectExtras?.effectOpacity?.smog ?? 1;
-  const stripH = Math.max(42, viewH * 0.1);
-  const geo = new THREE.PlaneGeometry(viewW, stripH);
+  const geo = new THREE.PlaneGeometry(viewW, viewH);
   const uniforms = {
     uTime: { value: 0 },
-    uOpacity: { value: 0.11 * (core.opacity / 100) * smogMult },
-    uScale: { value: 2.0 },
-    uResolution: { value: new THREE.Vector2(viewW, stripH) },
+    uOpacity: { value: 0.18 * (core.opacity / 100) * smogMult },
+    uScale: { value: 1.4 },
+    uResolution: { value: new THREE.Vector2(viewW, viewH) },
   };
   const mat = new THREE.ShaderMaterial({
     uniforms,
@@ -1298,15 +1194,12 @@ function createSmogOverlay(core) {
         vec2 aspect = vec2(uResolution.x / max(uResolution.y, 0.0001), 1.0);
         vec2 uv = (vUv - 0.5) * aspect + 0.5;
         uv *= uScale;
-        uv += vec2(0.01, 0.02) * uTime;
+        uv += vec2(0.015, 0.06) * uTime;
         float d = fbm(uv);
-        float puff = smoothstep(0.72, 0.96, fbm(uv * 0.85 + vec2(uTime * 0.11, -uTime * 0.07)));
-        d = smoothstep(0.28, 0.72, d) * 0.72 + puff * 0.28;
-        float floorMask = smoothstep(1.0, 0.2, vUv.y);
-        float riseMask = 1.0 - smoothstep(0.0, 1.0, vUv.y);
-        float vMask = floorMask * riseMask;
+        d = smoothstep(0.2, 0.65, d);
+        float vMask = smoothstep(0.85, 0.25, vUv.y);
         vec3 color = vec3(0.55, 0.52, 0.48);
-        gl_FragColor = vec4(color, clamp(d * vMask * uOpacity, 0.0, 1.0));
+        gl_FragColor = vec4(color, d * vMask * uOpacity);
       }
     `,
     transparent: true,
@@ -1314,7 +1207,6 @@ function createSmogOverlay(core) {
     blending: THREE.NormalBlending,
   });
   const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.set(0, -viewH / 2 + stripH / 2, -1);
   mesh.renderOrder = 10;
   const group = new THREE.Group();
   group.add(mesh);
@@ -1322,21 +1214,14 @@ function createSmogOverlay(core) {
   return {
     group,
     update(delta) {
-      uniforms.uTime.value += delta * 0.2;
+      uniforms.uTime.value += delta * 0.15;
     },
     setOpacity(v) {
       const m = core.effectExtras?.effectOpacity?.smog ?? 1;
-      uniforms.uOpacity.value = 0.11 * Math.max(0, Math.min(1, v / 100)) * m;
-    },
-    onResize(w, h) {
-      const nextStripH = Math.max(42, h * 0.1);
-      mesh.geometry.dispose();
-      mesh.geometry = new THREE.PlaneGeometry(w, nextStripH);
-      mesh.position.y = -h / 2 + nextStripH / 2;
-      uniforms.uResolution.value.set(w, nextStripH);
+      uniforms.uOpacity.value = 0.18 * Math.max(0, Math.min(1, v / 100)) * m;
     },
     dispose() {
-      mesh.geometry.dispose();
+      geo.dispose();
       mat.dispose();
     },
   };
@@ -1389,19 +1274,15 @@ function createAuroraNorthernGradients(core, visibilityScore) {
       }
       void main() {
         vec2 uv = vUv;
-        float n = fbm(uv * 2.5 + uTime * 0.025) * 0.05;
+        float n = fbm(uv * 2.5 + uTime * 0.02) * 0.06;
         float t = fract(uv.x * 0.5 + (1.0 - uv.y) * 0.5 + uTime * 0.01 + n);
         vec3 col = gradient(t);
         vec2 fromTop = uv - vec2(0.5, 1.0);
         float dist = length(fromTop) * 1.6;
         float mask = 1.0 - smoothstep(0.15, 1.0, dist);
         mask = mask * mask;
-        float noiseVal = clamp(fbm(uv * 4.0), 0.0, 1.0);
-        float edgeMask = smoothstep(0.2, 0.58, length(uv - vec2(0.5)));
-        float sideMask = smoothstep(0.22, 0.48, abs(uv.x - 0.5));
-        float borderMask = max(edgeMask, sideMask * 0.9);
-        float alpha = clamp(mask * uOpacity * (0.92 + 0.08 * noiseVal) * borderMask, 0.0, 1.0);
-        gl_FragColor = vec4(max(col, vec3(0.0)), alpha);
+        float alpha = mask * uOpacity * (0.94 + 0.06 * fbm(uv * 4.0));
+        gl_FragColor = vec4(col, alpha);
       }
     `,
     transparent: true,
@@ -1417,7 +1298,7 @@ function createAuroraNorthernGradients(core, visibilityScore) {
   let currentVisibilityScore = visibilityScore || 0.5;
   const applyOpacity = () => {
     const m = core.effectExtras?.effectOpacity?.aurora ?? 1;
-    const base = 0.22 * currentVisibilityScore * Math.max(0, Math.min(1, core.opacity / 100)) * m;
+    const base = 0.5 * currentVisibilityScore * Math.max(0, Math.min(1, core.opacity / 100)) * m;
     uniforms.uOpacity.value = base;
   };
 
@@ -1455,8 +1336,8 @@ function createAuroraOverlay(core, visibilityScore, variant) {
   const viewW = core.viewWidth;
   const viewH = core.viewHeight;
   const auroraMult = core.effectExtras?.effectOpacity?.aurora ?? 1;
-  const bandHeight = Math.max(62, viewH * 0.28);
-  const bottomY = -viewH / 2 + bandHeight / 2 - 10;
+  const bandHeight = 28;
+  const topY = viewH / 2 - 8;
   const group = new THREE.Group();
 
   const auroraVertexShader = `
@@ -1475,41 +1356,26 @@ function createAuroraOverlay(core, visibilityScore, variant) {
     uniform vec3 uColorB;
     uniform float uSpeed;
     uniform float uPulsePhase;
-    float softColumn(float x, float center, float width) {
-      float d = abs(x - center) / max(width, 0.0001);
-      return exp(-d * d * 2.5);
-    }
-
     void main() {
-      vec2 uv = vUv;
-      float drift = uTime * (0.014 + uSpeed * 0.006);
-      float c1 = softColumn(fract(uv.x + drift + uPulsePhase * 0.05), 0.18, 0.13);
-      float c2 = softColumn(fract(uv.x + drift * 1.15 + 0.23 + uPulsePhase * 0.07), 0.48, 0.15);
-      float c3 = softColumn(fract(uv.x + drift * 0.9 + 0.51 + uPulsePhase * 0.03), 0.78, 0.14);
-      float curtains = clamp(c1 + c2 + c3, 0.0, 1.0);
-      float yFade = pow(max(0.0, 1.0 - uv.y), 1.7);
-      float edgeFade = smoothstep(0.0, 0.08, uv.x) * smoothstep(0.0, 0.08, 1.0 - uv.x);
-      float radialEdge = smoothstep(0.2, 0.58, length(uv - vec2(0.5)));
-      float sideEdge = smoothstep(0.2, 0.47, abs(uv.x - 0.5));
-      float borderMask = max(radialEdge, sideEdge);
-      float fade = yFade * edgeFade * borderMask;
-      float t = 0.5 + 0.5 * sin((uTime * 0.55) + uv.x * 2.2 + uPulsePhase);
+      float t = 0.5 + 0.5 * sin(uTime * uSpeed);
       vec3 col = mix(uColorA, uColorB, t);
-      float pulse = 0.92 + 0.08 * sin(uTime * 0.7 + uPulsePhase);
-      float alpha = clamp(curtains * fade * uOpacity * pulse * 0.72, 0.0, 1.0);
+      float fromTop = 1.0 - vUv.y;
+      float fade = smoothstep(0.0, 0.4, fromTop) * smoothstep(1.15, 0.35, fromTop);
+      float pulse = 0.96 + 0.04 * sin(uTime * 0.8 + uPulsePhase);
+      float alpha = fade * uOpacity * pulse;
       gl_FragColor = vec4(col, alpha);
     }
   `;
 
   for (let i = 0; i < AURORA_BANDS.length; i++) {
     const band = AURORA_BANDS[i];
-    const w = viewW * 1.15;
+    const w = viewW * 1.05;
     const h = bandHeight;
     const geo = new THREE.PlaneGeometry(w, h);
     const pulsePhase = (i / AURORA_BANDS.length) * 6.28;
     const uniforms = {
       uTime: { value: 0 },
-      uOpacity: { value: 0.12 * (visibilityScore || 0.5) * (core.opacity / 100) * auroraMult },
+      uOpacity: { value: 0.28 * (visibilityScore || 0.5) * (core.opacity / 100) * auroraMult },
       uColorA: { value: new THREE.Vector3().fromArray(band.colorA) },
       uColorB: { value: new THREE.Vector3().fromArray(band.colorB) },
       uSpeed: { value: band.speed * 0.4 },
@@ -1524,7 +1390,7 @@ function createAuroraOverlay(core, visibilityScore, variant) {
       blending: THREE.AdditiveBlending,
     });
     const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(0, bottomY + i * 2, -8 - i * 0.01);
+    mesh.position.set(0, topY - i * (bandHeight + 6), -8);
     mesh.renderOrder = 9;
     group.add(mesh);
   }
@@ -1534,7 +1400,7 @@ function createAuroraOverlay(core, visibilityScore, variant) {
 
   const applyOpacity = () => {
     const m = core.effectExtras?.effectOpacity?.aurora ?? 1;
-    const base = 0.12 * currentVisibilityScore * Math.max(0, Math.min(1, core.opacity / 100)) * m;
+    const base = 0.28 * currentVisibilityScore * Math.max(0, Math.min(1, core.opacity / 100)) * m;
     for (const mesh of bandMeshes) {
       mesh.material.uniforms.uOpacity.value = base;
     }
@@ -1718,19 +1584,17 @@ function createSunBeamEffect(ctx) {
       uniform float uUvIndex;
       void main() {
         vec2 uv = vec2((vPosition.x / uViewSize.x) + 0.5, (vPosition.y / uViewSize.y) + 0.5);
-        float dist = length(uv - uOrigin);
-        float core = smoothstep(0.18, 0.0, dist);
-        float halo = smoothstep(0.62, 0.08, dist);
-        float rays = 0.5 + 0.5 * cos(atan(uv.y - uOrigin.y, uv.x - uOrigin.x) * 6.0);
-        float beam = smoothstep(0.9, 0.15, dist) * rays * 0.18;
-        float alpha = clamp((core * 0.55 + halo * 0.35 + beam) * 0.32 * uOpacity, 0.0, 1.0);
+        vec2 dir = uOrigin - uv;
+        float dist = length(dir);
+        float intensity = smoothstep(0.85, 0.15, dist);
+        float alpha = intensity * 0.28 * uOpacity;
         vec3 color;
         if (uUvIndex >= 6.0) {
-          color = mix(vec3(1.0, 0.62, 0.2), vec3(1.0, 0.4, 0.12), min(1.0, dist * 1.5));
+          color = mix(vec3(1.0, 0.5, 0.15), vec3(1.0, 0.35, 0.1), dist);
         } else if (uUvIndex >= 4.0) {
-          color = mix(vec3(1.0, 0.82, 0.42), vec3(1.0, 0.62, 0.25), min(1.0, dist * 1.4));
+          color = mix(vec3(1.0, 0.75, 0.35), vec3(1.0, 0.55, 0.2), dist);
         } else {
-          color = mix(vec3(1.0, 0.97, 0.84), vec3(1.0, 0.86, 0.52), min(1.0, dist * 1.4));
+          color = mix(vec3(1.0, 0.95, 0.8), vec3(1.0, 0.85, 0.4), dist);
         }
         gl_FragColor = vec4(color, alpha);
       }
@@ -1773,7 +1637,7 @@ function createSunBeamEffect(ctx) {
 
 function createCloudEffect(ctx) {
   const group = new THREE.Group();
-  const heightRatio = 0.25;
+  const heightRatio = 0.6;
   const cov = ctx.cloudCoverage;
   const coverageMult = cov != null ? 0.5 + (cov / 100) * 0.5 : 1;
   const cloudsMult = ctx.effectOpacity?.clouds ?? 1;
@@ -1781,7 +1645,7 @@ function createCloudEffect(ctx) {
   let geo = new THREE.PlaneGeometry(ctx.viewWidth, ctx.viewHeight * heightRatio);
   const uniforms = {
     uTime: { value: 0 },
-    uOpacity: { value: (ctx.opacity / 100) * 0.1 * coverageMult * cloudsMult },
+    uOpacity: { value: (ctx.opacity / 100) * 0.14 * coverageMult * cloudsMult },
     uViewSize: { value: new THREE.Vector2(ctx.viewWidth, ctx.viewHeight) },
     uScale: { value: ctx.isMobile ? 1.5 : 1.0 },
   };
@@ -1812,10 +1676,9 @@ function createCloudEffect(ctx) {
       vec2 q = vec2(fbm(uv + vec2(time * 0.5, time * 0.2)), fbm(uv + vec2(1.0)));
       vec2 r = vec2(fbm(uv + q + vec2(1.7, 9.2) + 0.15 * time), fbm(uv + q + vec2(8.3, 2.8) + 0.126 * time));
       float f = fbm(uv + r);
-      float cloud = smoothstep(0.36, 0.76, f);
-      cloud *= smoothstep(0.0, 0.18, vUv.y);
-      cloud *= smoothstep(1.0, 0.72, vUv.y);
-      cloud = pow(cloud, 1.25);
+      float cloud = smoothstep(0.2, 0.7, f);
+      cloud *= smoothstep(0.0, 0.3, vUv.y);
+      cloud *= smoothstep(1.0, 0.8, vUv.y);
       float shadow = smoothstep(0.3, 0.6, fbm(uv * 2.0 + r + vec2(0.5)));
       vec3 color = mix(vec3(0.81, 0.82, 0.89), vec3(1.0), shadow * 0.8 + 0.2);
       gl_FragColor = vec4(color, cloud * uOpacity);
@@ -1830,21 +1693,21 @@ function createCloudEffect(ctx) {
     blending: THREE.NormalBlending,
   });
   const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.set(0, ctx.viewHeight * 0.375, -6);
+  mesh.position.set(0, ctx.viewHeight * 0.25, -6);
   mesh.renderOrder = -2;
   group.add(mesh);
 
   return {
     group,
     update(delta) { uniforms.uTime.value += delta * speedMult; },
-    setOpacity(v) { uniforms.uOpacity.value = Math.max(0, Math.min(1, v / 100)) * 0.1 * coverageMult * cloudsMult; },
+    setOpacity(v) { uniforms.uOpacity.value = Math.max(0, Math.min(1, v / 100)) * 0.14 * coverageMult * cloudsMult; },
     onResize(w, h, isMobile) {
       geo.dispose();
       geo = new THREE.PlaneGeometry(w, h * heightRatio);
       mesh.geometry = geo;
       uniforms.uViewSize.value.set(w, h);
       uniforms.uScale.value = isMobile ? 1.5 : 1.0;
-      mesh.position.set(0, h * 0.375, -6);
+      mesh.position.set(0, h * 0.25, -6);
     },
     dispose() {
       geo.dispose();
