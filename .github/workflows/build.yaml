@@ -50,7 +50,6 @@ jobs:
           delete-branch: true
           title: "chore: Rebuild bundle for HACS"
           body: "Auto-generated PR with built fork_u-weather_aware.js (fixes 404 main.js). Merge to fix."
-          labels: automated
           add-paths: |
             fork_u-weather_aware.js
             workers/
