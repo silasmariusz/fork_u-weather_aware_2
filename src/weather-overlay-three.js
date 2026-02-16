@@ -325,6 +325,24 @@ function getPrecipitationMultiplier() {
   return Math.max(0.2, Math.min(1.5, 0.2 + (v / 10)));
 }
 
+function getPrecipitationAmountMm() {
+  const cfg = window.ForkUWeatherAwareConfig || {};
+  const ha = getHomeAssistant();
+  if (!ha?.hass) return 0;
+  if (cfg.precipitation_entity) {
+    const e = ha.hass.states[cfg.precipitation_entity];
+    if (e?.state !== 'unavailable' && e?.state !== 'unknown') {
+      const v = parseFloat(e.state);
+      if (!isNaN(v)) return Math.max(0, v);
+    }
+  }
+  const we = ha.hass.states[getWeatherEntityId()];
+  if (!we?.attributes) return 0;
+  const precip = we.attributes.precipitation ?? we.attributes.precipitation_1h ?? we.attributes.precipitation_probability;
+  const v = parseFloat(precip);
+  return isNaN(v) ? 0 : Math.max(0, v);
+}
+
 function getAuroraChance() {
   const cfg = window.ForkUWeatherAwareConfig || {};
   const ha = getHomeAssistant();
@@ -488,6 +506,16 @@ function getSpatialZIndex() {
   return z ?? 9998;
 }
 
+function getOverlayHostElement() {
+  const ha = document.querySelector('home-assistant');
+  const main = ha?.shadowRoot?.querySelector('home-assistant-main');
+  const appLayout = main?.shadowRoot?.querySelector('ha-app-layout');
+  const panelResolver = appLayout?.querySelector('partial-panel-resolver');
+  const panelLovelace = panelResolver?.shadowRoot?.querySelector('ha-panel-lovelace');
+  const huiRoot = panelLovelace?.shadowRoot?.querySelector('hui-root');
+  return huiRoot || panelLovelace || panelResolver || appLayout || document.body;
+}
+
 function filterEffectByConfig(effect) {
   const cfg = window.ForkUWeatherAwareConfig || {};
   const toggle = {
@@ -553,12 +581,16 @@ function updateWeather() {
     log('Weather:', newWeather, '→ Effect:', effect);
   }
 
-  const smogActive = isEffectEnabled('enable_smog_effect') && isSmogAlertActive();
+  const smogActive = effect !== 'stars' && isEffectEnabled('enable_smog_effect') && isSmogAlertActive();
   const moonPosition = effect === 'stars' && isEffectEnabled('enable_moon_glow') ? getMoonPosition() : null;
   const auroraVisibilityScore = effect === 'stars' ? getAuroraVisibilityScore() : 0;
-  const auroraOverlay = effect === 'stars' && auroraVisibilityScore > 0;
+  const auroraOverlay = effect === 'stars' && auroraVisibilityScore >= 0.65;
   const rainEffects = ['rain', 'rain_storm', 'rain_drizzle', 'snow_storm'];
-  const windowDroplets = rainEffects.includes(effect) && isEffectEnabled('enable_window_droplets');
+  const precipitationMm = getPrecipitationAmountMm();
+  const windowDroplets =
+    rainEffects.includes(effect) &&
+    isEffectEnabled('enable_window_droplets') &&
+    precipitationMm > 2;
   const spatialMode = (window.ForkUWeatherAwareConfig || {}).spatial_mode || 'foreground';
   const { speed: windSpeedKmh, bearing: windBearing } = getWindData();
   const windSwayFactor = (cfg.wind_sway_factor != null && !isNaN(parseFloat(cfg.wind_sway_factor)))
@@ -639,7 +671,7 @@ function init() {
   container.style.cssText =
     'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:var(--weather-overlay-z,9998);';
   applySpatialStyle();
-  document.body.appendChild(container);
+  getOverlayHostElement().appendChild(container);
 
   try {
     engine = new WeatherEffectsEngine(container, {
@@ -655,12 +687,16 @@ function init() {
       const weather = getWeatherState();
       const effect = filterEffectByConfig(mapWeatherStateToEffect(weather));
       currentWeather = weather;
-    const smogActive = isEffectEnabled('enable_smog_effect') && isSmogAlertActive();
+    const smogActive = effect !== 'stars' && isEffectEnabled('enable_smog_effect') && isSmogAlertActive();
     const moonPosition = effect === 'stars' && isEffectEnabled('enable_moon_glow') ? getMoonPosition() : null;
     const auroraVisibilityScore = effect === 'stars' ? getAuroraVisibilityScore() : 0;
-    const auroraOverlay = effect === 'stars' && auroraVisibilityScore > 0;
+    const auroraOverlay = effect === 'stars' && auroraVisibilityScore >= 0.65;
     const rainEffects = ['rain', 'rain_storm', 'rain_drizzle', 'snow_storm'];
-    const windowDroplets = rainEffects.includes(effect) && isEffectEnabled('enable_window_droplets');
+    const precipitationMm = getPrecipitationAmountMm();
+    const windowDroplets =
+      rainEffects.includes(effect) &&
+      isEffectEnabled('enable_window_droplets') &&
+      precipitationMm > 2;
     const spatialMode = (window.ForkUWeatherAwareConfig || {}).spatial_mode || 'foreground';
     const { speed: windSpeedKmh, bearing: windBearing } = getWindData();
     const initCfg = window.ForkUWeatherAwareConfig || {};
