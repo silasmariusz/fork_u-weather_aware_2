@@ -235,7 +235,7 @@
         const cur = cfg[id] || '';
         const opts = getEntityOptions(hass, domains, cur);
         list.innerHTML = opts
-          .filter(o => o.value) // pomijamy „— None —” jako realną wartość
+          .filter(o => o.value) // skip "— None —" as actual value
           .map(o => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`)
           .join('');
       });
@@ -475,7 +475,7 @@
             </div>
             <div class="form-row">
               <label>Drizzle threshold (mm)</label>
-              <input type="number" id="drizzle_precipitation_max" value="${cfg.drizzle_precipitation_max ?? 2.5}" min="0" max="20" step="0.5" style="width:72px" title="Precipitation ≤ this = drizzle (mży/kropi); above = normal rain">
+              <input type="number" id="drizzle_precipitation_max" value="${cfg.drizzle_precipitation_max ?? 2.5}" min="0" max="20" step="0.5" style="width:72px" title="Precipitation ≤ this = drizzle (light rain); above = normal rain">
             </div>
             <div class="form-row">
               <label>Wind sway factor</label>

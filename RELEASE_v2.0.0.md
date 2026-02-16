@@ -1,28 +1,28 @@
 # Release v2.0.0
 
-## Three.js WebGL overlay
+## Three.js WebGL Overlay
 
-Migracja z Canvas 2D na Three.js (WebGL). Lepsza wydajność, mniejsze zużycie baterii na telefonie.
+Migration from Canvas 2D to Three.js (WebGL). Better performance, lower battery usage on mobile.
 
-### Główne zmiany
+### Main Changes
 
-- **WebGL / Three.js** – GPU-accelerated efekty pogodowe
-- **Web Worker** – renderowanie w OffscreenCanvas (gdy dostępne)
-- **Efekty**: deszcz, śnieg, mgła, chmury, promienie słońca, błyskawice, grad, gwiazdy, glow księżyca, smog, Matrix
-- **Snowy2** – warstwowy efekt śniegu
-- **Window droplets** – kropelki na szybie przy deszczu
-- **Gradient-mask** – tryb `spatial_mode: 'gradient-mask'` (efekt przy krawędziach)
-- **WebGL fallback** – main thread gdy Worker niedostępny
-- **prefers-reduced-motion** – wyłączenie animacji na życzenie
-- **README** – sekcja Requirements (WebGL)
-- **Poprawki** – ctx null checks w funkcjach tekstur (weather-overlay.js)
+- **WebGL / Three.js** – GPU-accelerated weather effects
+- **Web Worker** – Rendering in OffscreenCanvas (when available)
+- **Effects**: rain, snow, fog, clouds, sun beams, lightning, hail, stars, moon glow, smog, Matrix
+- **Snowy2** – layered snow effect
+- **Window droplets** – raindrops on window during rain
+- **Gradient-mask** – `spatial_mode: 'gradient-mask'` (effects around edges)
+- **WebGL fallback** – main thread when Worker unavailable
+- **prefers-reduced-motion** – animation opt-out support
+- **README** – Requirements section (WebGL)
+- **Fixes** – ctx null checks in texture functions (weather-overlay.js)
 
-### Wymagania
+### Requirements
 
-- WebGL (obsługiwane przez nowoczesne przeglądarki)
-- `extra_module_url` w configuration.yaml
+- WebGL (supported by modern browsers)
+- `extra_module_url` in configuration.yaml
 
-### Instalacja HACS
+### HACS Installation
 
 ```
 https://github.com/silasmariusz/fork_u-weather_aware_2

@@ -1,11 +1,11 @@
-# Plan migracji: Canvas 2D → Three.js (WebGL)
+# Migration Plan: Canvas 2D → Three.js (WebGL)
 
 **Fork U - Weather Aware 2**  
-Cel: Lepsza wydajność, mniejsze zużycie baterii na telefonie.
+Goal: Better performance, lower battery usage on mobile.
 
-## Status implementacji
+## Implementation Status
 
-| Komponent | Status |
+| Component | Status |
 |-----------|--------|
 | Vite + Three.js | ✓ |
 | Worker (OffscreenCanvas) | ✓ |
@@ -18,87 +18,87 @@ Cel: Lepsza wydajność, mniejsze zużycie baterii na telefonie.
 | prefers-reduced-motion | ✓ |
 | gaming_matrix_only | ✓ (effect=none) |
 | Matrix rain | ✓ |
-| Snowy2 warstwy | ✓ |
+| Snowy2 layers | ✓ |
 | Window droplets | ✓ |
 | Gradient-mask (spatial_mode) | ✓ |
 
-**Build:** `npm run build` lub `npm run build:hacs`
+**Build:** `npm run build` or `npm run build:hacs`
 
 ---
 
-## Spis treści
+## Table of Contents
 
-1. [Faza 0: Przygotowanie](#faza-0-przygotowanie)
-2. [Faza 1: Fundament Three.js](#faza-1-fundament-threejs)
-3. [Faza 2: Migracja efektów](#faza-2-migracja-efektów)
-4. [Faza 3: Web Worker](#faza-3-web-worker)
-5. [Faza 4: Optymalizacje mobile](#faza-4-optymalizacje-mobile)
-6. [Faza 5: Fallback i testy](#faza-5-fallback-i-testy)
-7. [Struktura plików docelowa](#struktura-plików-docelowa)
-8. [Szacunek czasowy](#szacunek-czasowy)
+1. [Phase 0: Preparation](#phase-0-preparation)
+2. [Phase 1: Three.js Foundation](#phase-1-threejs-foundation)
+3. [Phase 2: Effect Migration](#phase-2-effect-migration)
+4. [Phase 3: Web Worker](#phase-3-web-worker)
+5. [Phase 4: Mobile Optimizations](#phase-4-mobile-optimizations)
+6. [Phase 5: Fallback and Tests](#phase-5-fallback-and-tests)
+7. [Target File Structure](#target-file-structure)
+8. [Time Estimate](#time-estimate)
 
 ---
 
-## Faza 0: Przygotowanie
+## Phase 0: Preparation
 
-### 0.1 Decyzja: Bundler vs CDN
+### 0.1 Decision: Bundler vs CDN
 
-| Opcja | Zalety | Wady |
-|-------|--------|------|
-| **CDN** (skrypt w HTML) | Szybki start, brak zmian w buildzie | Three.js ~600KB, nie tree-shaking, zależność od sieci |
-| **Vite/Rollup** | Tree-shaking (mniejszy bundle), modułowość | Wymaga zmiany procesu budowania karty HA |
+| Option | Pros | Cons |
+|--------|------|------|
+| **CDN** (script in HTML) | Quick start, no build changes | Three.js ~600KB, no tree-shaking, network dependency |
+| **Vite/Rollup** | Tree-shaking (smaller bundle), modularity | Requires changing HA card build process |
 
-**Rekomendacja:** Bundler (Vite). Większość nowoczesnych kart HA już używa bundlera. Three.js z `import` daje ok. ~150–200 KB gzip po tree-shake.
+**Recommendation:** Bundler (Vite). Most modern HA cards already use a bundler. Three.js with `import` yields ~150–200 KB gzip after tree-shake.
 
-### 0.2 Instalacja (jeśli Vite)
+### 0.2 Installation (if Vite)
 
 ```bash
 npm create vite@latest . -- --template vanilla
 npm install three
 ```
 
-### 0.3 Konfiguracja wyjścia dla HACS
+### 0.3 HACS Output Configuration
 
-- Build powinien produkować jeden plik `.js` (np. `fork_u-weather_aware.js`) ładowany przez Lovelace.
-- W `vite.config.js` ustawić `output.format: 'iife'` i `output.file` na docelową nazwę.
+- Build should produce a single `.js` file (e.g. `fork_u-weather_aware.js`) loaded by Lovelace.
+- In `vite.config.js` set `output.format: 'iife'` and `output.file` to the target name.
 
 ---
 
-## Faza 1: Fundament Three.js
+## Phase 1: Three.js Foundation
 
-### 1.1 Nowa struktura modułu
+### 1.1 New Module Structure
 
 ```
-weather-overlay.js (lub weather-overlay.ts)
+weather-overlay.js (or weather-overlay.ts)
 ├── initThreeRenderer()
 ├── resize()
 ├── destroy()
 └── setEffect(effectType)
 ```
 
-### 1.2 Kroki implementacji
+### 1.2 Implementation Steps
 
-1. **Utworzenie sceny**
+1. **Scene creation**
    - `THREE.Scene()`
-   - `THREE.OrthographicCamera()` – widok 2D (jak Canvas)
+   - `THREE.OrthographicCamera()` – 2D view (like Canvas)
    - `THREE.WebGLRenderer({ alpha: true, antialias: !isMobile })`
 
-2. **Montowanie canvas**
-   - Renderer tworzy własny `<canvas>`
-   - Umieszczenie w tym samym kontenerze co obecny (np. `document.body` lub warstwa overlay)
+2. **Canvas mounting**
+   - Renderer creates its own `<canvas>`
+   - Place in the same container as the current one (e.g. `document.body` or overlay layer)
 
 3. **Render loop**
-   - Zamiana `requestAnimationFrame` + `ctx.clearRect` + rysowanie na `renderer.render(scene, camera)`
-   - Zachowanie aktualnego flow: `updateWeather()` → `animate()` → aktualizacja efektu
+   - Replace `requestAnimationFrame` + `ctx.clearRect` + drawing with `renderer.render(scene, camera)`
+   - Keep existing flow: `updateWeather()` → `animate()` → effect update
 
-4. **API kompatybilne z kartą**
-   - `window.ForkUWeatherAwareConfig` – bez zmian
-   - Logika `getWeatherState()`, `isOverlayEnabled()`, `isOnEnabledDashboard()` – bez zmian
-   - Tylko warstwa rysowania (Canvas → Three.js) jest wymieniana
+4. **Card-compatible API**
+   - `window.ForkUWeatherAwareConfig` – no changes
+   - Logic for `getWeatherState()`, `isOverlayEnabled()`, `isOnEnabledDashboard()` – no changes
+   - Only the drawing layer (Canvas → Three.js) is replaced
 
-### 1.3 Mapowanie stanów pogody → efektów
+### 1.3 Weather State → Effect Mapping
 
-Zachować istniejące mapowanie, np.:
+Preserve existing mapping, e.g.:
 
 | Weather state | Effect (Three.js) |
 |---------------|-------------------|
@@ -112,132 +112,132 @@ Zachować istniejące mapowanie, np.:
 | lightning / lightning-rainy | lightning / rain_storm |
 | hail | hail |
 | clear-night | stars (+ moon_glow) |
-| windy | wind (opcjonalnie) |
+| windy | wind (optional) |
 
 ---
 
-## Faza 2: Migracja efektów
+## Phase 2: Effect Migration
 
-### Kolejność i szczegóły
+### Order and Details
 
-#### 2.1 Sun Beams (prosty)
-- **Implementacja:** `createSunBeamEffect()`
-- PlaneGeometry pełnoekranowe + ShaderMaterial
+#### 2.1 Sun Beams (simple)
+- **Implementation:** `createSunBeamEffect()`
+- Fullscreen PlaneGeometry + ShaderMaterial
 - Vertex: pass-through UV/position
-- Fragment: rays od `vec2(1.1, 1.05)` z `sin(angle * 18 + uTime)` + smoothstep
+- Fragment: rays from `vec2(1.1, 1.05)` with `sin(angle * 18 + uTime)` + smoothstep
 
 #### 2.2 Clouds
-- **Implementacja:** `createCloudEffect()`
-- PlaneGeometry (np. 60% wysokości), pozycja u góry
+- **Implementation:** `createCloudEffect()`
+- PlaneGeometry (e.g. 60% height), position at top
 - Shader: FBM (fractal Brownian motion) noise, `smoothstep(0.2, 0.7, f)`
-- Używane: `uTime`, `uOpacity`, `uScale` (mobile), `uCloudColor`, `uCloudShadow`
+- Used: `uTime`, `uOpacity`, `uScale` (mobile), `uCloudColor`, `uCloudShadow`
 
 #### 2.3 Fog (light/dense)
-- **Implementacja:** `createFogEffect()` + `getFogSettings()`
-- Kilka warstw PlaneGeometry z ShaderMaterial
+- **Implementation:** `createFogEffect()` + `getFogSettings()`
+- Several PlaneGeometry layers with ShaderMaterial
 - Shader: hash + noise + fbm, `smoothstep(uLow, uHigh, density)`
-- Parametry: scale, speed, flow, low, high, contrast, color
+- Parameters: scale, speed, flow, low, high, contrast, color
 
 #### 2.4 Rain
-- **Implementacja:** `createRainEffect()`
-- InstancedBufferGeometry: wiele „linii” deszczu w jednym draw call
-- Atrybuty: instanceOffset, instanceSpeed, instanceLength, instanceSway, instancePhase
-- Shader vertex: `progress = fract(uTime * speed + phase)`, pozycja Y
-- Shader fragment: alpha z `vAlpha * uOpacity`
-- Dla rain_storm: lightning overlay
+- **Implementation:** `createRainEffect()`
+- InstancedBufferGeometry: many rain "lines" in one draw call
+- Attributes: instanceOffset, instanceSpeed, instanceLength, instanceSway, instancePhase
+- Vertex shader: `progress = fract(uTime * speed + phase)`, Y position
+- Fragment shader: alpha from `vAlpha * uOpacity`
+- For rain_storm: lightning overlay
 
 #### 2.5 Snow
-- **Implementacja:** `createSnowEffect()`
-- BufferGeometry + Points (position), PointsMaterial z teksturą „płatka”
-- Pętla JS w `update()`: zmiana position array, `needsUpdate = true`
-- Opcjonalnie: snow accumulation (shader na górze/dole ekranu)
+- **Implementation:** `createSnowEffect()`
+- BufferGeometry + Points (position), PointsMaterial with "flake" texture
+- JS loop in `update()`: update position array, `needsUpdate = true`
+- Optional: snow accumulation (shader top/bottom of screen)
 
 #### 2.6 Lightning
-- **Implementacja:** (w rain_storm lub osobny `createLightningEffect()`)
-- PlaneGeometry fullscreen + ShaderMaterial (jagged line w fragmencie)
-- Timer w JS: losowy interwał, trigger flash, fade out
-- `uFlash`, `uOrigin`, `uTime` w shaderze
+- **Implementation:** (in rain_storm or separate `createLightningEffect()`)
+- Fullscreen PlaneGeometry + ShaderMaterial (jagged line in fragment)
+- JS timer: random interval, trigger flash, fade out
+- `uFlash`, `uOrigin`, `uTime` in shader
 
 #### 2.7 Hail
-- **Implementacja:** `createHailEffect()`
-- InstancedBufferGeometry, małe kwadraty (PlaneGeometry 0.25×0.25)
-- Vertex: rotacja + spadanie w dół, bez sway
-- Fragment: białe lodowe kolory
+- **Implementation:** `createHailEffect()`
+- InstancedBufferGeometry, small squares (PlaneGeometry 0.25×0.25)
+- Vertex: rotation + fall down, no sway
+- Fragment: white icy colors
 
 #### 2.8 Stars
-- BufferGeometry (position), Points, tekstura gwiazdki
-- Lub proste kółka/cross w PointsMaterial
-- Logika mrugania w `update()`: phase, opacity
+- BufferGeometry (position), Points, star texture
+- Or simple circles/cross in PointsMaterial
+- Twinkle logic in `update()`: phase, opacity
 
 #### 2.9 Moon Glow
-- Analogicznie do sun beams: radial gradient (plane lub shader)
-- Pozycja z `getMoonPosition()`, rozmiar/intensywność z distance
+- Similar to sun beams: radial gradient (plane or shader)
+- Position from `getMoonPosition()`, size/intensity from distance
 
 #### 2.10 Matrix (gaming)
-- **Złożoność:** wysoka
-- Opcja A: wiele PlaneGeometry z Texture (atlas znaków), animacja w JS
-- Opcja B: sprite-based
-- Znaki: texture per character lub atlas
+- **Complexity:** high
+- Option A: many PlaneGeometry with Texture (character atlas), animation in JS
+- Option B: sprite-based
+- Characters: texture per character or atlas
 
 #### 2.11 Smog
-- Podobnie do fog: warstwy shaderowe lub cząstki (Points)
-- Kolory szaro-brązowe, ruch w górę
+- Similar to fog: shader layers or particles (Points)
+- Grey-brown colors, upward motion
 
-#### 2.12 Snowy2 (warstwy)
-- Kilka warstw Points (różne rozmiary, prędkości, blur)
-- Logika „pile” (akumulacja) – można uprościć lub pominąć na start
+#### 2.12 Snowy2 (layers)
+- Several Points layers (different sizes, speeds, blur)
+- "Pile" (accumulation) logic – can simplify or skip initially
 
 #### 2.13 Window droplets
-- **Złożoność:** wysoka (fizyka, overlap)
-- Można na początek zostawić w Canvas 2D lub zrobić proste sprites w Three.js
+- **Complexity:** high (physics, overlap)
+- Can keep in Canvas 2D initially or do simple sprites in Three.js
 
 ---
 
-## Faza 3: Web Worker
+## Phase 3: Web Worker
 
-### 3.1 Wymagania
+### 3.1 Requirements
 
-- `OffscreenCanvas` – wsparcie w głównych przeglądarkach
-- `transferControlToOffscreen()` na `<canvas>`
-- Worker: import tego samego kodu Three.js (lub osobny bundle workera)
+- `OffscreenCanvas` – support in major browsers
+- `transferControlToOffscreen()` on `<canvas>`
+- Worker: import same Three.js code (or separate worker bundle)
 
-### 3.2 Architektura
+### 3.2 Architecture
 
 ```
 Main thread:
   - WeatherEffectsEngine
-  - Tworzy Worker
+  - Creates Worker
   - postMessage: INIT (canvas, viewport), START (effect, opacity), RESIZE, STOP, DISPOSE
   - onmessage: READY, ERROR
 
 Worker:
   - dynamic-weather-worker.js
-  - Importuje WeatherEffectsCore (Three.js)
-  - Obsługuje wiadomości, uruchamia render loop wewnątrz workera
+  - Imports WeatherEffectsCore (Three.js)
+  - Handles messages, runs render loop inside worker
 ```
 
 ### 3.3 Fallback
 
-Jeśli `Worker` lub `OffscreenCanvas` niedostępne → uruchomienie Three.js w main thread (bez workera). Działa, ale main thread jest obciążony.
+If `Worker` or `OffscreenCanvas` unavailable → run Three.js in main thread (no worker). Works, but main thread is busy.
 
 ---
 
-## Faza 4: Optymalizacje mobile
+## Phase 4: Mobile Optimizations
 
-| Optymalizacja | Implementacja |
-|---------------|---------------|
-| DPR cap | `Math.min(devicePixelRatio, 2)` na mobile |
-| Mniej cząstek | `isMobile ? 0.6 * count : count` dla rain, snow, clouds |
-| Prostsze shadery | Mniej iteracji FBM, niższa rozdzielczość noise |
-| 30 FPS | Throttle `requestAnimationFrame` do ~33 ms |
-| Wyłączenie antialiasingu | `antialias: !isMobile` w WebGLRenderer |
-| Snowy2 light | Mniej warstw, mniej płatków (już jest w config) |
+| Optimization | Implementation |
+|--------------|----------------|
+| DPR cap | `Math.min(devicePixelRatio, 2)` on mobile |
+| Fewer particles | `isMobile ? 0.6 * count : count` for rain, snow, clouds |
+| Simpler shaders | Fewer FBM iterations, lower noise resolution |
+| 30 FPS | Throttle `requestAnimationFrame` to ~33 ms |
+| Disable antialiasing | `antialias: !isMobile` in WebGLRenderer |
+| Snowy2 light | Fewer layers, fewer flakes (already in config) |
 
 ---
 
-## Faza 5: Fallback i testy
+## Phase 5: Fallback and Tests
 
-### 5.1 Wykrywanie WebGL
+### 5.1 WebGL Detection
 
 ```javascript
 function isWebGLSupported() {
@@ -250,61 +250,61 @@ function isWebGLSupported() {
 }
 ```
 
-### 5.2 Strategia fallback
+### 5.2 Fallback Strategy
 
-1. Brak WebGL → ukryć overlay, wyświetlić komunikat (opcjonalnie)
-2. Nieudana inicjalizacja Three.js → fallback do starego Canvas 2D (jeśli zachowany)
-3. Worker się nie uruchomi → Three.js w main thread
+1. No WebGL → hide overlay, show message (optional)
+2. Three.js init fails → fallback to old Canvas 2D (if kept)
+3. Worker fails to start → Three.js in main thread
 
-### 5.3 Testy
+### 5.3 Tests
 
 - [ ] Chrome, Firefox, Safari (desktop + mobile)
 - [ ] Android (Chrome, possibly Kiwi/Firefox)
 - [ ] iOS Safari
-- [ ] Różne DPR (1, 2, 3)
-- [ ] `prefers-reduced-motion: reduce` – zatrzymanie animacji
-- [ ] Dashboard w trybie edycji (preview)
-- [ ] Wszystkie stany pogody + development_mode (test_effect)
+- [ ] Various DPR (1, 2, 3)
+- [ ] `prefers-reduced-motion: reduce` – animation stops
+- [ ] Dashboard in edit mode (preview)
+- [ ] All weather states + development_mode (test_effect)
 
 ---
 
-## Struktura plików docelowa
+## Target File Structure
 
 ```
 fork_u-weather_aware_2/
 ├── src/
-│   ├── weather-effects-core.js      # Three.js logika efektów
-│   ├── weather-effects-engine.js    # Orkiestracja main/worker
-│   ├── weather-worker-messages.js   # Typy wiadomości
+│   ├── weather-effects-core.js      # Three.js effect logic
+│   ├── weather-effects-engine.js    # Main/worker orchestration
+│   ├── weather-worker-messages.js   # Message types
 │   ├── workers/
 │   │   └── dynamic-weather-worker.js # Worker
 │   └── weather-overlay.js           # Entry: config, getWeatherState, init, update loop
-├── fork_u-weather_aware.js          # Loader karty (bez zmian lub minimalne)
-├── fork_u-weather_aware-editor.js   # Edytor (bez zmian)
+├── fork_u-weather_aware.js          # Card loader (no or minimal changes)
+├── fork_u-weather_aware-editor.js   # Editor (no changes)
 ├── vite.config.js
 ├── package.json
-└── MIGRATION_PLAN_THREEJS.md        # Ten dokument
+└── MIGRATION_PLAN_THREEJS.md        # This document
 ```
 
-Po buildzie: jeden `fork_u-weather_aware.js` (lub kilka chunków, jeśli code-splitting).
+After build: single `fork_u-weather_aware.js` (or several chunks if code-splitting).
 
 ---
 
-## Szacunek czasowy
+## Time Estimate
 
-| Faza | Czas (orientacyjnie) |
-|------|----------------------|
-| Faza 0: Przygotowanie | 0,5–1 dzień |
-| Faza 1: Fundament | 1–2 dni |
-| Faza 2: Efekty (wszystkie) | 5–10 dni |
-| Faza 3: Web Worker | 1–2 dni |
-| Faza 4: Mobile | 0,5 dnia |
-| Faza 5: Fallback + testy | 1–2 dni |
-| **Razem** | **~2–3 tygodnie** |
+| Phase | Time (approx.) |
+|-------|----------------|
+| Phase 0: Preparation | 0.5–1 day |
+| Phase 1: Foundation | 1–2 days |
+| Phase 2: Effects (all) | 5–10 days |
+| Phase 3: Web Worker | 1–2 days |
+| Phase 4: Mobile | 0.5 day |
+| Phase 5: Fallback + tests | 1–2 days |
+| **Total** | **~2–3 weeks** |
 
 ---
 
-## Referencje
+## References
 
 - [Three.js docs](https://threejs.org/docs/)
 - [OffscreenCanvas – MDN](https://developer.mozilla.org/en-US/docs/Web/API/OffscreenCanvas)

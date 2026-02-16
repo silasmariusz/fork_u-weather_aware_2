@@ -45,7 +45,7 @@
     rain_max_tilt_deg: 30,        // max rain tilt from wind (degrees); 0 = always vertical
     rain_wind_min_kmh: 3,         // min wind speed (km/h) to apply tilt; below = vertical
     theme_mode: null,             // 'light'|'dark' – set by card from HA theme; null = auto-detect
-    drizzle_precipitation_max: 2.5, // mm – above this rainy is normal rain; below = drizzle (mży/kropi)
+    drizzle_precipitation_max: 2.5, // mm – above this rainy is normal rain; below = drizzle (light rain)
     speed_factor_rain: 1,
     speed_factor_snow: 1,
     speed_factor_clouds: 1,
@@ -2065,14 +2065,14 @@
       let weatherState = (weatherEntity.state || '').toLowerCase().replace(/_/g, '-');
       log(`Weather entity state: ${weatherState}`);
       
-      // Drizzle (mży/kropi): rainy with low precipitation – wiosenny lekki deszcz
+      // Drizzle: rainy with low precipitation (light rain)
       const cfgOverlay = window.ForkUWeatherAwareConfig || {};
       const drizzleMax = (cfgOverlay.drizzle_precipitation_max != null && !isNaN(parseFloat(cfgOverlay.drizzle_precipitation_max))) ? parseFloat(cfgOverlay.drizzle_precipitation_max) : 2.5;
       if (weatherState === 'rainy') {
         const precip = weatherEntity.attributes?.precipitation != null ? parseFloat(weatherEntity.attributes.precipitation) : (weatherEntity.attributes?.precipitation_1h != null ? parseFloat(weatherEntity.attributes.precipitation_1h) : NaN);
         if (!isNaN(precip) && precip > 0 && precip <= drizzleMax) {
           weatherState = 'rainy-drizzle';
-          log(`Drizzle detected: precipitation ${precip} mm <= ${drizzleMax} (mży/kropi)`);
+          log(`Drizzle detected: precipitation ${precip} mm <= ${drizzleMax} (light rain)`);
         }
       }
       
