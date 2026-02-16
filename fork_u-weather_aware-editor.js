@@ -64,7 +64,15 @@
     aurora_visibility_alert_entity: null,
     aurora_visibility_min: 0.15,
     k_index_entity: null,
-    debug_aurora_score: null
+    debug_aurora_score: null,
+    opacity_moon: 100,
+    opacity_clouds: 100,
+    opacity_aurora: 100,
+    opacity_stars: 100,
+    opacity_droplets: 100,
+    opacity_sun: 100,
+    opacity_fog: 100,
+    opacity_smog: 100
   };
 
   class ForkUWeatherAwareCard extends HTMLElement {
@@ -308,6 +316,7 @@
       set('enable_matrix', cfg.enable_matrix);
       set('enable_window_droplets', cfg.enable_window_droplets);
       set('stars_require_moon', cfg.stars_require_moon);
+      ['moon', 'clouds', 'aurora', 'stars', 'droplets', 'sun', 'fog', 'smog'].forEach(k => set('opacity_' + k, cfg['opacity_' + k] ?? 100));
       set('drizzle_precipitation_max', cfg.drizzle_precipitation_max);
       ['rain', 'snow', 'clouds', 'fog', 'smog', 'hail', 'lightning', 'stars', 'matrix'].forEach(k => set('speed_factor_' + k, cfg['speed_factor_' + k]));
       set('development_mode', cfg.development_mode);
@@ -574,6 +583,17 @@
             </div>
             <div class="form-row">
               <label><input type="checkbox" id="enable_window_droplets" ${cfg.enable_window_droplets !== false ? 'checked' : ''}> Window droplets (side rain on glass)</label>
+            </div>
+            <div class="section-title" style="margin-top:12px">Effect opacity (0–100, default 100)</div>
+            <div class="form-row">
+              <label>Moon</label><input type="number" id="opacity_moon" value="${cfg.opacity_moon ?? 100}" min="0" max="100" style="width:52px">
+              <label>Clouds</label><input type="number" id="opacity_clouds" value="${cfg.opacity_clouds ?? 100}" min="0" max="100" style="width:52px">
+              <label>Aurora</label><input type="number" id="opacity_aurora" value="${cfg.opacity_aurora ?? 100}" min="0" max="100" style="width:52px">
+              <label>Stars</label><input type="number" id="opacity_stars" value="${cfg.opacity_stars ?? 100}" min="0" max="100" style="width:52px">
+              <label>Droplets</label><input type="number" id="opacity_droplets" value="${cfg.opacity_droplets ?? 100}" min="0" max="100" style="width:52px">
+              <label>Sun</label><input type="number" id="opacity_sun" value="${cfg.opacity_sun ?? 100}" min="0" max="100" style="width:52px">
+              <label>Fog</label><input type="number" id="opacity_fog" value="${cfg.opacity_fog ?? 100}" min="0" max="100" style="width:52px">
+              <label>Smog</label><input type="number" id="opacity_smog" value="${cfg.opacity_smog ?? 100}" min="0" max="100" style="width:52px">
             </div>
           </div>
             </div>
@@ -898,6 +918,14 @@
           enable_matrix: !!root.getElementById('enable_matrix')?.checked,
           enable_window_droplets: !!root.getElementById('enable_window_droplets')?.checked,
           stars_require_moon: !!root.getElementById('stars_require_moon')?.checked,
+          opacity_moon: Math.max(0, Math.min(100, parseFloat(root.getElementById('opacity_moon')?.value || '100') || 100)),
+          opacity_clouds: Math.max(0, Math.min(100, parseFloat(root.getElementById('opacity_clouds')?.value || '100') || 100)),
+          opacity_aurora: Math.max(0, Math.min(100, parseFloat(root.getElementById('opacity_aurora')?.value || '100') || 100)),
+          opacity_stars: Math.max(0, Math.min(100, parseFloat(root.getElementById('opacity_stars')?.value || '100') || 100)),
+          opacity_droplets: Math.max(0, Math.min(100, parseFloat(root.getElementById('opacity_droplets')?.value || '100') || 100)),
+          opacity_sun: Math.max(0, Math.min(100, parseFloat(root.getElementById('opacity_sun')?.value || '100') || 100)),
+          opacity_fog: Math.max(0, Math.min(100, parseFloat(root.getElementById('opacity_fog')?.value || '100') || 100)),
+          opacity_smog: Math.max(0, Math.min(100, parseFloat(root.getElementById('opacity_smog')?.value || '100') || 100)),
           mobile_limit_dpr: !!root.getElementById('mobile_limit_dpr')?.checked,
           mobile_reduce_particles: !!root.getElementById('mobile_reduce_particles')?.checked,
           mobile_snowy2_light: !!root.getElementById('mobile_snowy2_light')?.checked,
@@ -918,7 +946,7 @@
       };
 
       // Use 'change' for text inputs to avoid cursor jumping (config-changed triggers re-render)
-      const textIds = ['weather_entity', 'sun_entity', 'theme_mode', 'moon_phase_entity', 'uv_index_entity', 'moon_position_entity', 'moon_azimuth_entity', 'moon_altitude_entity', 'moon_distance_entity', 'gaming_mode_entity', 'pm25_entity', 'pm4_entity', 'pm10_entity', 'smog_threshold_pm25', 'smog_threshold_pm4', 'smog_threshold_pm10', 'cloud_coverage_entity', 'wind_speed_entity', 'wind_direction_entity', 'precipitation_entity', 'lightning_counter_entity', 'lightning_distance_entity', 'aurora_variant', 'aurora_chance_entity', 'aurora_visibility_alert_entity', 'aurora_visibility_min', 'k_index_entity', 'debug_precipitation', 'debug_wind_speed', 'debug_wind_direction', 'debug_lightning_distance', 'debug_lightning_counter', 'debug_cloud_coverage', 'debug_aurora_score', 'cloud_speed_multiplier', 'drizzle_precipitation_max', 'wind_sway_factor', 'rain_max_tilt_deg', 'rain_wind_min_kmh', 'speed_factor_rain', 'speed_factor_snow', 'speed_factor_clouds', 'speed_factor_fog', 'speed_factor_smog', 'speed_factor_hail', 'speed_factor_lightning', 'speed_factor_stars', 'speed_factor_matrix', 'snowy_variant', 'spatial_mode'];
+      const textIds = ['weather_entity', 'sun_entity', 'theme_mode', 'moon_phase_entity', 'uv_index_entity', 'moon_position_entity', 'moon_azimuth_entity', 'moon_altitude_entity', 'moon_distance_entity', 'gaming_mode_entity', 'pm25_entity', 'pm4_entity', 'pm10_entity', 'smog_threshold_pm25', 'smog_threshold_pm4', 'smog_threshold_pm10', 'cloud_coverage_entity', 'wind_speed_entity', 'wind_direction_entity', 'precipitation_entity', 'lightning_counter_entity', 'lightning_distance_entity', 'aurora_variant', 'aurora_chance_entity', 'aurora_visibility_alert_entity', 'aurora_visibility_min', 'k_index_entity', 'debug_precipitation', 'debug_wind_speed', 'debug_wind_direction', 'debug_lightning_distance', 'debug_lightning_counter', 'debug_cloud_coverage', 'debug_aurora_score', 'cloud_speed_multiplier', 'drizzle_precipitation_max', 'wind_sway_factor', 'rain_max_tilt_deg', 'rain_wind_min_kmh', 'speed_factor_rain', 'speed_factor_snow', 'speed_factor_clouds', 'speed_factor_fog', 'speed_factor_smog', 'speed_factor_hail', 'speed_factor_lightning', 'speed_factor_stars', 'speed_factor_matrix', 'snowy_variant', 'spatial_mode', 'opacity_moon', 'opacity_clouds', 'opacity_aurora', 'opacity_stars', 'opacity_droplets', 'opacity_sun', 'opacity_fog', 'opacity_smog'];
       textIds.forEach(id => {
         const el = root.getElementById(id);
         if (el) el.addEventListener('change', update);

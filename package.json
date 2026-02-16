@@ -1,6 +1,6 @@
 {
   "name": "fork-u-weather-aware",
-  "version": "2.5.0",
+  "version": "2.6.0",
   "description": "Fork U - Weather Aware - Weather overlay for Home Assistant with Three.js",
   "type": "module",
   "scripts": {

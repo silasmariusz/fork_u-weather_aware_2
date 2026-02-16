@@ -75,6 +75,14 @@ const DEFAULT_OVERLAY_CONFIG = {
   aurora_visibility_min: 0.15,
   k_index_entity: null,
   debug_aurora_score: null,
+  opacity_moon: 100,
+  opacity_clouds: 100,
+  opacity_aurora: 100,
+  opacity_stars: 100,
+  opacity_droplets: 100,
+  opacity_sun: 100,
+  opacity_fog: 100,
+  opacity_smog: 100,
 };
 
 window.ForkUWeatherAwareConfig = Object.assign(

@@ -577,9 +577,20 @@ function updateWeather() {
   const themeMode = getThemeMode();
   const cloudSpeedMult = (cfg.cloud_speed_multiplier != null && !isNaN(parseFloat(cfg.cloud_speed_multiplier)))
     ? Math.max(0.1, Math.min(3, parseFloat(cfg.cloud_speed_multiplier))) : 1;
+  const effectOpacity = {
+    moon: Math.max(0, Math.min(1, (cfg.opacity_moon ?? 100) / 100)),
+    clouds: Math.max(0, Math.min(1, (cfg.opacity_clouds ?? 100) / 100)),
+    aurora: Math.max(0, Math.min(1, (cfg.opacity_aurora ?? 100) / 100)),
+    stars: Math.max(0, Math.min(1, (cfg.opacity_stars ?? 100) / 100)),
+    droplets: Math.max(0, Math.min(1, (cfg.opacity_droplets ?? 100) / 100)),
+    sun: Math.max(0, Math.min(1, (cfg.opacity_sun ?? 100) / 100)),
+    fog: Math.max(0, Math.min(1, (cfg.opacity_fog ?? 100) / 100)),
+    smog: Math.max(0, Math.min(1, (cfg.opacity_smog ?? 100) / 100)),
+  };
   if (engine) {
     engine.start(effect, 100, {
       smogActive,
+      effectOpacity,
       moonPosition,
       windowDroplets,
       spatialMode,
@@ -661,8 +672,19 @@ function init() {
       ? parseFloat(initCfg.rain_wind_min_kmh) : 3;
     const initLightning = (effect === 'lightning' || effect === 'rain_storm') ? getLightningData() : null;
     const initSun = effect === 'sun_beams' ? getSunPosition() : null;
+    const initEffectOpacity = {
+      moon: Math.max(0, Math.min(1, (initCfg.opacity_moon ?? 100) / 100)),
+      clouds: Math.max(0, Math.min(1, (initCfg.opacity_clouds ?? 100) / 100)),
+      aurora: Math.max(0, Math.min(1, (initCfg.opacity_aurora ?? 100) / 100)),
+      stars: Math.max(0, Math.min(1, (initCfg.opacity_stars ?? 100) / 100)),
+      droplets: Math.max(0, Math.min(1, (initCfg.opacity_droplets ?? 100) / 100)),
+      sun: Math.max(0, Math.min(1, (initCfg.opacity_sun ?? 100) / 100)),
+      fog: Math.max(0, Math.min(1, (initCfg.opacity_fog ?? 100) / 100)),
+      smog: Math.max(0, Math.min(1, (initCfg.opacity_smog ?? 100) / 100)),
+    };
     engine.start(effect, 100, {
       smogActive,
+      effectOpacity: initEffectOpacity,
       moonPosition,
       windowDroplets,
       spatialMode,
