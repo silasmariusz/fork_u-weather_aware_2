@@ -15,7 +15,7 @@ export function mapWeatherStateToEffect(weatherState) {
   if (s === 'lightning') return 'lightning';
   if (s === 'snowy' || s === 'snow') return 'snow_gentle';
   if (s === 'snowy-rainy' || s === 'snowy_rainy') return 'snow_storm';
-  if (s === 'snowy2') return 'snow_gentle';
+  if (s === 'snowy2') return 'snow_layered';
   if (s === 'snowy3') return 'snow_gentle';
   if (s === 'fog' || s === 'foggy') return 'fog_light';
   if (s === 'sunny' || s === 'clear') return 'sun_beams';

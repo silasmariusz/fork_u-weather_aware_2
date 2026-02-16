@@ -244,6 +244,7 @@ function filterEffectByConfig(effect) {
     rain_drizzle: cfg.enable_rain,
     snow_gentle: cfg.enable_snow,
     snow_storm: cfg.enable_snow,
+    snow_layered: cfg.enable_snow,
     fog_light: cfg.enable_fog,
     fog_dense: cfg.enable_fog,
     sun_beams: cfg.enable_sun_glow,
@@ -251,6 +252,7 @@ function filterEffectByConfig(effect) {
     hail: cfg.enable_hail,
     lightning: cfg.enable_lightning_effect,
     stars: cfg.enable_stars,
+    matrix: cfg.enable_matrix,
   };
   if (effect && effect !== 'none' && toggle[effect] === false) return 'none';
   return effect;
@@ -292,7 +294,7 @@ function updateWeather() {
   const cfg = window.ForkUWeatherAwareConfig || {};
   const matrixOnly = cfg.gaming_matrix_only && isGamingModeActive() && isEffectEnabled('enable_matrix');
   const newWeather = matrixOnly ? null : getWeatherState();
-  const effect = matrixOnly ? 'none' : filterEffectByConfig(mapWeatherStateToEffect(newWeather));
+  const effect = matrixOnly ? 'matrix' : filterEffectByConfig(mapWeatherStateToEffect(newWeather));
 
   if (newWeather !== currentWeather || !engine) {
     currentWeather = newWeather;
@@ -301,8 +303,11 @@ function updateWeather() {
 
   const smogActive = isEffectEnabled('enable_smog_effect') && isSmogAlertActive();
   const moonPosition = effect === 'stars' && isEffectEnabled('enable_moon_glow') ? getMoonPosition() : null;
+  const rainEffects = ['rain', 'rain_storm', 'rain_drizzle', 'snow_storm'];
+  const windowDroplets = rainEffects.includes(effect) && isEffectEnabled('enable_window_droplets');
+  const spatialMode = (window.ForkUWeatherAwareConfig || {}).spatial_mode || 'foreground';
   if (engine) {
-    engine.start(effect, 100, { smogActive, moonPosition });
+    engine.start(effect, 100, { smogActive, moonPosition, windowDroplets, spatialMode });
   }
 }
 
@@ -347,10 +352,13 @@ function init() {
       const weather = getWeatherState();
       const effect = filterEffectByConfig(mapWeatherStateToEffect(weather));
       currentWeather = weather;
-      const smogActive = isEffectEnabled('enable_smog_effect') && isSmogAlertActive();
-      const moonPosition = effect === 'stars' && isEffectEnabled('enable_moon_glow') ? getMoonPosition() : null;
-      engine.start(effect, 100, { smogActive, moonPosition });
-    }
+    const smogActive = isEffectEnabled('enable_smog_effect') && isSmogAlertActive();
+    const moonPosition = effect === 'stars' && isEffectEnabled('enable_moon_glow') ? getMoonPosition() : null;
+    const rainEffects = ['rain', 'rain_storm', 'rain_drizzle', 'snow_storm'];
+    const windowDroplets = rainEffects.includes(effect) && isEffectEnabled('enable_window_droplets');
+    const spatialMode = (window.ForkUWeatherAwareConfig || {}).spatial_mode || 'foreground';
+    engine.start(effect, 100, { smogActive, moonPosition, windowDroplets, spatialMode });
+  }
   } catch (err) {
     error('Weather overlay init failed:', err);
     if (container?.parentNode) container.parentNode.removeChild(container);

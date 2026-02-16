@@ -17,9 +17,9 @@ Cel: Lepsza wydajność, mniejsze zużycie baterii na telefonie.
 | WebGL detect + fallback | ✓ |
 | prefers-reduced-motion | ✓ |
 | gaming_matrix_only | ✓ (effect=none) |
-| Matrix rain | ✗ (pominięty) |
-| Snowy2 warstwy | ✗ (fallback snow_gentle) |
-| Window droplets | ✗ (pominięty) |
+| Matrix rain | ✓ |
+| Snowy2 warstwy | ✓ |
+| Window droplets | ✓ |
 
 **Build:** `npm run build` lub `npm run build:hacs`
 

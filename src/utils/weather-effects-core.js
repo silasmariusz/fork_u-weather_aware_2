@@ -109,6 +109,11 @@ export class WeatherEffectsCore {
     this.lastAppliedExtras = {};
     this.snowSurfaces = [];
     this.smogOverlay = null;
+    this.windowDropletsOverlay = null;
+    this.renderTarget = null;
+    this.maskScene = null;
+    this.maskCamera = null;
+    this.maskQuad = null;
     this.renderLoop = (ts) => this.renderFrame(ts);
   }
 
@@ -149,10 +154,12 @@ export class WeatherEffectsCore {
       this.lastAppliedExtras.snowAccumulation !== this.effectExtras.snowAccumulation ||
       this.lastAppliedExtras.matrixRainColor !== this.effectExtras.matrixRainColor ||
       this.lastAppliedExtras.smogActive !== this.effectExtras.smogActive ||
+      this.lastAppliedExtras.windowDroplets !== this.effectExtras.windowDroplets ||
       moonChanged;
     if (this.currentEffect === effect && this.activeEffect && !extrasChanged) {
       this.activeEffect.setOpacity(this.opacity);
       this.updateSmogOverlay();
+      this.updateWindowDropletsOverlay();
       this.startLoop();
       return;
     }
@@ -161,6 +168,7 @@ export class WeatherEffectsCore {
 
   stop() {
     this.disposeSmogOverlay();
+    this.disposeWindowDropletsOverlay();
     this.disposeActiveEffect();
     this.currentEffect = 'none';
     this.stopLoop();
@@ -186,6 +194,25 @@ export class WeatherEffectsCore {
     this.smogOverlay = null;
   }
 
+  updateWindowDropletsOverlay() {
+    const active = Boolean(this.effectExtras.windowDroplets);
+    if (active && !this.windowDropletsOverlay) {
+      this.windowDropletsOverlay = createWindowDropletsOverlay(this);
+      this.scene.add(this.windowDropletsOverlay.group);
+    } else if (!active && this.windowDropletsOverlay) {
+      this.disposeWindowDropletsOverlay();
+    } else if (this.windowDropletsOverlay) {
+      this.windowDropletsOverlay.setOpacity(this.opacity);
+    }
+  }
+
+  disposeWindowDropletsOverlay() {
+    if (!this.windowDropletsOverlay) return;
+    this.scene.remove(this.windowDropletsOverlay.group);
+    this.windowDropletsOverlay.dispose();
+    this.windowDropletsOverlay = null;
+  }
+
   setOpacity(opacity) {
     this.opacity = Math.max(0, Math.min(100, opacity));
     this.activeEffect?.setOpacity(this.opacity);
@@ -203,6 +230,9 @@ export class WeatherEffectsCore {
   resize(options) {
     this.viewportWidth = options.viewportWidth;
     this.viewportHeight = options.viewportHeight;
+    if (this.renderTarget) {
+      this.renderTarget.setSize(this.viewportWidth, this.viewportHeight);
+    }
     this.devicePixelRatio = options.devicePixelRatio ?? 1;
     this.isMobile = options.isMobile ?? false;
     this.viewWidth = this.computeViewWidth(WEATHER_EFFECTS_VIEW_HEIGHT);
@@ -221,6 +251,14 @@ export class WeatherEffectsCore {
 
   destroy() {
     this.stop();
+    if (this.renderTarget) {
+      this.renderTarget.dispose();
+      this.renderTarget = null;
+    }
+    if (this.maskQuad?.material) {
+      this.maskQuad.material.dispose();
+    }
+    this.maskScene?.clear();
     this.renderer.dispose();
     this.scene.clear();
   }
@@ -244,8 +282,59 @@ export class WeatherEffectsCore {
     this.lastTimestamp = timestamp;
     this.activeEffect?.update(delta, timestamp / 1000);
     this.smogOverlay?.update(delta);
+    this.windowDropletsOverlay?.update(delta);
+
+    const useGradientMask = this.effectExtras.spatialMode === 'gradient-mask';
+    if (useGradientMask) {
+      this.ensureGradientMaskPass();
+      this.renderer.setRenderTarget(this.renderTarget);
+    }
     this.renderer.render(this.scene, this.camera);
+    if (useGradientMask) {
+      this.renderer.setRenderTarget(null);
+      this.maskQuad.material.uniforms.tDiffuse.value = this.renderTarget.texture;
+      this.renderer.render(this.maskScene, this.maskCamera);
+    }
     this.animationFrame = requestFrame(this.renderLoop);
+  }
+
+  ensureGradientMaskPass() {
+    if (this.renderTarget) return;
+    this.renderTarget = new THREE.WebGLRenderTarget(this.viewportWidth, this.viewportHeight, {
+      minFilter: THREE.LinearFilter,
+      magFilter: THREE.LinearFilter,
+      format: THREE.RGBAFormat,
+      type: THREE.UnsignedByteType,
+      stencilBuffer: false,
+    });
+    this.maskCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    this.maskScene = new THREE.Scene();
+    const geo = new THREE.PlaneGeometry(2, 2);
+    const mat = new THREE.ShaderMaterial({
+      uniforms: {
+        tDiffuse: { value: null },
+        uInner: { value: 0.32 },
+        uOuter: { value: 0.85 },
+      },
+      vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: `
+        uniform sampler2D tDiffuse;
+        uniform float uInner;
+        uniform float uOuter;
+        varying vec2 vUv;
+        void main() {
+          vec4 tex = texture2D(tDiffuse, vUv);
+          vec2 c = vUv - 0.5;
+          float d = length(c) * 2.0;
+          float mask = smoothstep(uInner, uOuter, d);
+          gl_FragColor = vec4(tex.rgb, tex.a * mask);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+    });
+    this.maskQuad = new THREE.Mesh(geo, mat);
+    this.maskScene.add(this.maskQuad);
   }
 
   setEffect(effect) {
@@ -269,6 +358,7 @@ export class WeatherEffectsCore {
     this.scene.add(instance.group);
     this.lastAppliedExtras = { ...this.effectExtras };
     this.updateSmogOverlay();
+    this.updateWindowDropletsOverlay();
     this.startLoop();
   }
 
@@ -296,9 +386,11 @@ export class WeatherEffectsCore {
     if (effect === 'lightning') return createLightningEffect(ctx);
     if (effect === 'sun_beams') return createSunBeamEffect(ctx);
     if (effect === 'stars') return createStarsEffect(ctx);
+    if (effect === 'matrix') return createMatrixEffect(ctx);
     if (effect === 'clouds') return createCloudEffect(ctx);
     if (effect === 'hail') return createHailEffect(ctx);
     if (effect.startsWith('rain')) return createRainEffect(ctx);
+    if (effect === 'snow_layered') return createSnowy2Effect(ctx);
     if (effect.startsWith('snow')) return createSnowEffect(ctx);
     if (effect.startsWith('fog')) return createFogEffect(ctx);
     return null;
@@ -491,9 +583,214 @@ function createSnowEffect(ctx) {
   };
 }
 
-function getStarsCount(isMobile) {
-  return isMobile ? 80 : 140;
+const SNOWY2_LAYERS = [
+  { sizeMin: 24, sizeMax: 40, speedFactor: 0.12, swayAmpMin: 10, swayAmpMax: 30, opacity: 1, colorMin: 255, colorMax: 255 },
+  { sizeMin: 20, sizeMax: 28, speedFactor: 0.09, swayAmpMin: 10, swayAmpMax: 25, opacity: 0.85, colorMin: 255, colorMax: 255 },
+  { sizeMin: 16, sizeMax: 24, speedFactor: 0.07, swayAmpMin: 10, swayAmpMax: 20, opacity: 0.75, colorMin: 255, colorMax: 255 },
+  { sizeMin: 12, sizeMax: 18, speedFactor: 0.05, swayAmpMin: 10, swayAmpMax: 20, opacity: 0.65, colorMin: 220, colorMax: 229 },
+  { sizeMin: 10, sizeMax: 14, speedFactor: 0.03, swayAmpMin: 10, swayAmpMax: 20, opacity: 0.55, colorMin: 210, colorMax: 219 },
+  { sizeMin: 8, sizeMax: 12, speedFactor: 0.01, swayAmpMin: 10, swayAmpMax: 20, opacity: 0.4, colorMin: 200, colorMax: 209 },
+];
+
+function createSnowy2Effect(ctx) {
+  const group = new THREE.Group();
+  let totalFlakes = (ctx.isMobile ? 180 : 300);
+  const flakesPerLayer = Math.floor(totalFlakes / SNOWY2_LAYERS.length);
+  const tex = createSnowflakeTexture();
+
+  const layerData = SNOWY2_LAYERS.map((lp) => {
+    const positions = new Float32Array(flakesPerLayer * 3);
+    const fallSpeeds = new Float32Array(flakesPerLayer);
+    const swayAmps = new Float32Array(flakesPerLayer);
+    const swayOffsets = new Float32Array(flakesPerLayer);
+    const swaySpeeds = new Float32Array(flakesPerLayer);
+
+    for (let i = 0; i < flakesPerLayer; i++) {
+      const i3 = i * 3;
+      const size = lp.sizeMin + Math.random() * (lp.sizeMax - lp.sizeMin);
+      positions[i3] = THREE.MathUtils.randFloatSpread(ctx.viewWidth + 20);
+      positions[i3 + 1] = THREE.MathUtils.randFloatSpread(ctx.viewHeight + 20);
+      positions[i3 + 2] = Math.random() * 2 - 1;
+      fallSpeeds[i] = size * lp.speedFactor * 0.15 + Math.random() * 0.02;
+      swayAmps[i] = lp.swayAmpMin + Math.random() * (lp.swayAmpMax - lp.swayAmpMin);
+      swayOffsets[i] = Math.random() * Math.PI * 2;
+      swaySpeeds[i] = 0.01 + Math.random() * 0.02;
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const sizeAvg = (lp.sizeMin + lp.sizeMax) / 2;
+    const mat = new THREE.PointsMaterial({
+      map: tex,
+      transparent: true,
+      opacity: lp.opacity * (ctx.opacity / 100),
+      sizeAttenuation: false,
+      size: sizeAvg * 0.15,
+      color: 0xffffff,
+      depthWrite: false,
+      depthTest: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const mesh = new THREE.Points(geo, mat);
+    mesh.frustumCulled = false;
+    group.add(mesh);
+    return { geo, mat, fallSpeeds, swayAmps, swayOffsets, swaySpeeds, baseOpacity: lp.opacity };
+  });
+
+  return {
+    group,
+    update(delta) {
+      layerData.forEach((ld) => {
+        const verts = ld.geo.attributes.position.array;
+        const d = delta * 60;
+        for (let i = 0; i < verts.length / 3; i++) {
+          const i3 = i * 3;
+          ld.swayOffsets[i] += ld.swaySpeeds[i];
+          const swayX = Math.sin(ld.swayOffsets[i]) * ld.swayAmps[i] * 0.08;
+          verts[i3] += swayX * d;
+          verts[i3 + 1] -= ld.fallSpeeds[i] * d;
+          const halfW = ctx.viewWidth / 2 + 15;
+          const halfH = ctx.viewHeight / 2 + 15;
+          if (verts[i3 + 1] < -halfH) {
+            verts[i3 + 1] = halfH;
+            verts[i3] = THREE.MathUtils.randFloatSpread(ctx.viewWidth + 20);
+          }
+          if (verts[i3] < -halfW) verts[i3] = halfW;
+          if (verts[i3] > halfW) verts[i3] = -halfW;
+        }
+        ld.geo.attributes.position.needsUpdate = true;
+      });
+    },
+    setOpacity(v) {
+      const n = Math.max(0, Math.min(1, v / 100));
+      layerData.forEach((ld) => {
+        ld.mat.opacity = ld.baseOpacity * n;
+      });
+    },
+    onResize(w, h) {
+      ctx.viewWidth = w;
+      ctx.viewHeight = h;
+    },
+    dispose() {
+      layerData.forEach((ld) => {
+        ld.geo.dispose();
+        ld.mat.dispose();
+      });
+      tex.dispose();
+    },
+  };
 }
+
+const MATRIX_CHARS = ['園', '迎', '簡', '益', '大', '诶', '比', '西', '迪', '伊', '弗', '吉', '尺', '杰', '开', '艾', '勒', '马', '娜'];
+const MATRIX_GREEN = '#00ff41';
+const MATRIX_GREEN_DIM = '#00cc33';
+const MATRIX_MIN_STREAM_DIST = 85;
+
+function createMatrixEffect(ctx) {
+  const group = new THREE.Group();
+  const cw = Math.max(256, Math.floor(ctx.viewportWidth / 2));
+  const ch = Math.max(256, Math.floor(ctx.viewportHeight / 2));
+  const { canvas: matrixCanvas, ctx: matrixCtx } = createDrawingSurface(cw, ch);
+  const texture = createCanvasTexture(matrixCanvas);
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+
+  const geo = new THREE.PlaneGeometry(ctx.viewWidth, ctx.viewHeight);
+  const mat = new THREE.MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    opacity: 0.9 * (ctx.opacity / 100),
+    depthWrite: false,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  group.add(mesh);
+
+  const streams = [];
+  let spawnTimer = 0;
+
+  return {
+    group,
+    update(delta) {
+      const W = matrixCanvas.width;
+      const H = matrixCanvas.height;
+      const scale = W / ctx.viewportWidth;
+      spawnTimer += delta * 1000;
+
+      const oneThirdY = H / 3;
+      const anyPastThird = streams.some((s) => s.y > oneThirdY);
+      const canSpawn = (streams.length === 0 || anyPastThird) && spawnTimer >= 0.8;
+
+      if (canSpawn && streams.length < 6) {
+        spawnTimer = 0;
+        const leftZone = W * 0.28;
+        const rightStart = W * 0.72;
+        let tries = 15;
+        let x;
+        do {
+          const side = Math.random() < 0.5;
+          x = side ? 30 + Math.random() * (leftZone - 60) : rightStart + 30 + Math.random() * (W - rightStart - 60);
+          const minDist = MATRIX_MIN_STREAM_DIST * (W / ctx.viewportWidth);
+          const overlaps = streams.some((s) => Math.abs(s.x - x) < minDist);
+          if (!overlaps) break;
+        } while (--tries > 0);
+        if (tries > 0) {
+          const len = 4 + Math.floor(Math.random() * 8);
+          streams.push({
+            x,
+            y: -80,
+            chars: Array.from({ length: len }, () => MATRIX_CHARS[Math.floor(Math.random() * MATRIX_CHARS.length)]),
+            speed: (0.15 + Math.random() * 0.12) * scale,
+          });
+        }
+      }
+
+      matrixCtx.fillStyle = 'rgba(0,0,0,0.08)';
+      matrixCtx.fillRect(0, 0, W, H);
+
+      matrixCtx.font = `${Math.max(12, 16 * scale)}px monospace`;
+      matrixCtx.textAlign = 'center';
+      matrixCtx.textBaseline = 'top';
+      const centerX = W / 2;
+
+      for (let i = streams.length - 1; i >= 0; i--) {
+        const s = streams[i];
+        s.y += s.speed;
+        if (s.y > H + 150) {
+          streams.splice(i, 1);
+          continue;
+        }
+        const distFromCenter = Math.abs(s.x - centerX);
+        const centerOpacity = distFromCenter < W * 0.2 ? 0.5 + (distFromCenter / (W * 0.2)) * 0.4 : 0.9;
+        const charH = 16 * scale;
+        for (let j = 0; j < s.chars.length; j++) {
+          const trailAlpha = 1 - (j / s.chars.length) * 0.5;
+          matrixCtx.globalAlpha = trailAlpha * centerOpacity;
+          matrixCtx.fillStyle = j === 0 ? MATRIX_GREEN : MATRIX_GREEN_DIM;
+          matrixCtx.fillText(s.chars[j], s.x, s.y + j * charH);
+        }
+        matrixCtx.globalAlpha = 1;
+      }
+
+      texture.needsUpdate = true;
+    },
+    setOpacity(v) {
+      mat.opacity = 0.9 * Math.max(0, Math.min(1, v / 100));
+    },
+    onResize(w, h) {
+      ctx.viewWidth = w;
+      ctx.viewHeight = h;
+      mesh.geometry.dispose();
+      mesh.geometry = new THREE.PlaneGeometry(w, h);
+    },
+    dispose() {
+      geo.dispose();
+      mat.dispose();
+      texture.dispose();
+    },
+  };
+}
+
+function getStarsCount(isMobile) {
 
 function createStarsEffect(ctx) {
   const group = new THREE.Group();
@@ -580,6 +877,148 @@ function createStarsEffect(ctx) {
         moonMesh.geometry.dispose();
         moonMesh.material.dispose();
       }
+    },
+  };
+}
+
+const MIN_DROPLET_DIST = 55;
+
+function createWindowDropletsOverlay(core) {
+  const viewW = core.viewWidth;
+  const viewH = core.viewHeight;
+  const { canvas: dropCanvas, ctx: dropCtx } = createDrawingSurface(
+    Math.max(256, Math.floor(core.viewportWidth / 2)),
+    Math.max(256, Math.floor(core.viewportHeight / 2))
+  );
+  const texture = createCanvasTexture(dropCanvas);
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+
+  const geo = new THREE.PlaneGeometry(viewW, viewH);
+  const mat = new THREE.MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    opacity: 0.95 * (core.opacity / 100),
+    depthWrite: false,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.renderOrder = 5;
+  const group = new THREE.Group();
+  group.add(mesh);
+
+  const droplets = [];
+  let spawnTimer = 0;
+  let nextIntervalMs = 0;
+
+  function dropletOverlaps(x, y, size) {
+    for (const o of droplets) {
+      const dx = x - o.x;
+      const dy = y - o.y;
+      const minDist = MIN_DROPLET_DIST + (size + o.size) * 0.5;
+      if (dx * dx + dy * dy < minDist * minDist) return true;
+    }
+    return false;
+  }
+
+  function getSpawnInterval() {
+    return (25000 / (2 + Math.random() * 2)) * (1.2 + Math.random() * 0.8);
+  }
+
+  return {
+    group,
+    update(delta) {
+      const W = dropCanvas.width;
+      const H = dropCanvas.height;
+      const dMs = Math.min(delta * 1000, 50);
+
+      spawnTimer += dMs;
+      if (nextIntervalMs <= 0) nextIntervalMs = getSpawnInterval();
+      if (spawnTimer >= nextIntervalMs) {
+        spawnTimer = 0;
+        nextIntervalMs = getSpawnInterval();
+        const sideZone = 0.18;
+        const leftMax = W * sideZone;
+        const rightMin = W * (1 - sideZone);
+        const side = Math.random() < 0.5 ? 'left' : 'right';
+        const size = 3 + Math.random() * 5;
+        let x, y;
+        let tries = 12;
+        do {
+          x = side === 'left' ? Math.random() * leftMax : rightMin + Math.random() * (W - rightMin);
+          y = Math.random() * H * 0.55;
+        } while (--tries > 0 && dropletOverlaps(x, y, size));
+        if (tries > 0) {
+          droplets.push({
+            x, y, size,
+            phase: 'appear',
+            opacity: 0,
+            life: 0,
+            appearDur: 300,
+            restDur: 2000 + Math.random() * 2500,
+            slideVel: 8 + Math.random() * 6,
+            slideAccel: 0.8 + Math.random() * 0.6,
+          });
+        }
+      }
+
+      dropCtx.clearRect(0, 0, W, H);
+
+      for (let i = droplets.length - 1; i >= 0; i--) {
+        const d = droplets[i];
+        d.life += dMs;
+
+        if (d.phase === 'appear') {
+          d.opacity = Math.min(1, (d.life / d.appearDur) * 1.8);
+          if (d.life >= d.appearDur) {
+            d.phase = 'rest';
+            d.life = 0;
+            d.opacity = 1;
+          }
+        } else if (d.phase === 'rest') {
+          if (d.life >= d.restDur) {
+            d.phase = 'slide';
+            d.life = 0;
+          }
+        } else {
+          const dt = dMs / 1000;
+          d.slideVel = (d.slideVel || 8) + d.slideAccel * dt * 60;
+          d.y += d.slideVel * dt;
+          const frac = d.y / H;
+          d.opacity = frac < 0.85 ? 1 : Math.max(0, (1 - frac) / 0.15);
+          if (d.y > H + d.size * 2) {
+            droplets.splice(i, 1);
+            continue;
+          }
+        }
+
+        if (d.y <= H + d.size * 2) {
+          dropCtx.save();
+          dropCtx.globalAlpha = d.opacity;
+          const grad = dropCtx.createRadialGradient(
+            d.x - d.size * 0.3, d.y - d.size * 0.3, 0,
+            d.x, d.y, d.size * 1.5
+          );
+          grad.addColorStop(0, 'rgba(220, 235, 255, 0.6)');
+          grad.addColorStop(0.4, 'rgba(190, 210, 240, 0.45)');
+          grad.addColorStop(0.8, 'rgba(160, 180, 210, 0.2)');
+          grad.addColorStop(1, 'rgba(140, 160, 190, 0)');
+          dropCtx.fillStyle = grad;
+          dropCtx.beginPath();
+          dropCtx.ellipse(d.x, d.y, d.size * 0.5, d.size * 1.1, 0, 0, Math.PI * 2);
+          dropCtx.fill();
+          dropCtx.restore();
+        }
+      }
+
+      texture.needsUpdate = true;
+    },
+    setOpacity(v) {
+      mat.opacity = 0.95 * Math.max(0, Math.min(1, v / 100));
+    },
+    dispose() {
+      geo.dispose();
+      mat.dispose();
+      texture.dispose();
     },
   };
 }

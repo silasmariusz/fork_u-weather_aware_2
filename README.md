@@ -82,6 +82,12 @@ Configured via `spatial_mode` and the **Spatial awareness** panel in the card ed
 
 This is the heart of **Spatial Aware** behaviour: you decide if effects are pure background, living under Bubble overlays, wrapped around the content with a mask, or full foreground.
 
+Requirements
+------------
+
+- **WebGL** – The overlay uses **Three.js (WebGL)** for smooth, GPU‑accelerated effects. Modern browsers support WebGL; if unavailable or disabled, the card falls back to a simpler main‑thread renderer.
+- **JavaScript modules** – The card loads as an ES module; `extra_module_url` in `configuration.yaml` is required.
+
 Installation
 ------------
 
