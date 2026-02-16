@@ -43,6 +43,12 @@ jobs:
           echo ""
           wc -c fork_u-weather_aware.js
 
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hacs-bundle
+          path: fork_u-weather_aware.js
+
       - name: Commit and push bundle
         uses: EndBug/add-and-commit@v9
         with:
