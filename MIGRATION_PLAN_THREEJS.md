@@ -20,6 +20,7 @@ Cel: Lepsza wydajność, mniejsze zużycie baterii na telefonie.
 | Matrix rain | ✓ |
 | Snowy2 warstwy | ✓ |
 | Window droplets | ✓ |
+| Gradient-mask (spatial_mode) | ✓ |
 
 **Build:** `npm run build` lub `npm run build:hacs`
 

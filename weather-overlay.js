@@ -498,6 +498,7 @@
     canvas.width = size;
     canvas.height = size;
     const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
     const half = size / 2;
 
     const gradient = ctx.createRadialGradient(half, half, 0, half, half, half);
@@ -522,6 +523,7 @@
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
 
     const grad = ctx.createLinearGradient(0, 0, width, 0);
     if (theme === 'light') {
@@ -550,6 +552,7 @@
     canvas.width = size;
     canvas.height = size;
     const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
     const half = size / 2;
 
     // Use a generic gradient structure, we can modulate opacity via globalAlpha
@@ -580,6 +583,7 @@
     canvas.width = size;
     canvas.height = size;
     const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
     const half = size / 2;
 
     const sunGradient = ctx.createRadialGradient(half, half, 0, half, half, radius);
@@ -752,7 +756,7 @@
         const baseOpacity = this.opacity * 0.6;
         const baseColor = weatherConfigs[currentWeather]?.color || 'rgba(180, 180, 180, 0.10)';
         const cloudTex = getCloudPuffTexture(baseColor);
-        
+        if (cloudTex) {
         for (let i = 0; i < this.puffCount; i++) {
           const angle = (i / this.puffCount) * Math.PI * 2;
           const puffSize = this.size * this.puffSizes[i];
@@ -762,6 +766,7 @@
           ctx.globalAlpha = baseOpacity;
           // Draw cached texture centered at puff position
           ctx.drawImage(cloudTex, this.x + offsetX - puffSize, this.y + offsetY - puffSize, puffSize * 2, puffSize * 2);
+        }
         }
         ctx.globalAlpha = 1;
         
@@ -838,11 +843,12 @@
         const theme = getThemeMode();
         const fogColor = weatherConfigs[currentWeather].color;
         const fogTex = getFogTexture(fogColor, theme);
-        
+        if (fogTex) {
         ctx.globalAlpha = this.opacity * 0.2;
         // Stretch the 1px high texture to full height (300px) and width
         ctx.drawImage(fogTex, this.x - this.size, this.y - 15, this.size * 2000, 300);
         ctx.globalAlpha = 1;
+        }
         
       } else if (this.type === 'hail') {
         // Bright, circular hailstones with icy gradient – very visible on both themes
@@ -1199,7 +1205,7 @@
       } else {
         const theme = getThemeMode();
         const smogTex = getSmogTexture(isMobile, theme);
-        
+        if (smogTex) {
         // Modulate opacity using globalAlpha (texture has max opacity)
         // Original logic: opacity scaled by fadeOut, then by theme/mobile factors
         const finalAlpha = op; 
@@ -1207,6 +1213,7 @@
         smogCtx.globalAlpha = finalAlpha;
         smogCtx.drawImage(smogTex, p.x - r, p.y - r, r * 2, r * 2);
         smogCtx.globalAlpha = 1;
+        }
       }
     }
   }
@@ -1256,9 +1263,9 @@
 
     const sunTex = getSunGlowTexture(isHighUv);
     const radius = 500;
-    
-    // Draw texture centered
+    if (sunTex) {
     ctx.drawImage(sunTex, sunX - radius, sunY - radius);
+    }
   }
 
   // Sunny2: sun beams (rays from sun position)
