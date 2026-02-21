@@ -247,9 +247,7 @@ function getLightningData() {
     distanceKm = cfg.debug_lightning_distance != null && cfg.debug_lightning_distance !== ''
       ? parseFloat(cfg.debug_lightning_distance) || 0
       : 5;
-    if (cfg.debug_lightning_counter != null && cfg.debug_lightning_counter !== '') {
-      lastLightningCount = count;
-    }
+    if (lastLightningCount < 0) lastLightningCount = count; // init so first frame does not trigger a flash
   } else if (ha?.hass?.states) {
     const counterId = cfg.lightning_counter_entity;
     const distId = cfg.lightning_distance_entity;
@@ -482,6 +480,26 @@ function getWindData() {
   return { speed, bearing };
 }
 
+function parseSpeedFactor(rawValue, fallback = 1) {
+  const parsed = parseFloat(rawValue);
+  if (isNaN(parsed)) return fallback;
+  return Math.max(0.1, Math.min(3, parsed));
+}
+
+function getSpeedFactors(cfg = {}) {
+  return {
+    speed_factor_rain: parseSpeedFactor(cfg.speed_factor_rain, 1),
+    speed_factor_snow: parseSpeedFactor(cfg.speed_factor_snow, 1),
+    speed_factor_clouds: parseSpeedFactor(cfg.speed_factor_clouds, 1),
+    speed_factor_fog: parseSpeedFactor(cfg.speed_factor_fog, 1),
+    speed_factor_smog: parseSpeedFactor(cfg.speed_factor_smog, 1),
+    speed_factor_hail: parseSpeedFactor(cfg.speed_factor_hail, 1),
+    speed_factor_lightning: parseSpeedFactor(cfg.speed_factor_lightning, 1),
+    speed_factor_stars: parseSpeedFactor(cfg.speed_factor_stars, 1),
+    speed_factor_matrix: parseSpeedFactor(cfg.speed_factor_matrix, 1),
+  };
+}
+
 function getSpatialZIndex() {
   const mode = (window.ForkUWeatherAwareConfig || {}).spatial_mode || 'foreground';
   const z = { foreground: 9998, background: -1, bubble: 3, 'gradient-mask': 9997 }[mode];
@@ -570,8 +588,7 @@ function updateWeather() {
   const lightningData = (effect === 'lightning' || effect === 'rain_storm') ? getLightningData() : null;
   const lightningOverlay = effect === 'rain_storm' ? lightningData : null;
   const sunPosition = effect === 'sun_beams' ? getSunPosition() : null;
-  const speedFactorLightning = (cfg.speed_factor_lightning != null && !isNaN(parseFloat(cfg.speed_factor_lightning)))
-    ? parseFloat(cfg.speed_factor_lightning) : 1;
+  const speedFactors = getSpeedFactors(cfg);
   const cloudCoverage = getCloudCoverage();
   const precipitationMultiplier = getPrecipitationMultiplier();
   const themeMode = getThemeMode();
@@ -602,7 +619,7 @@ function updateWeather() {
       lightningData,
       lightningOverlay,
       sunPosition,
-      speed_factor_lightning: speedFactorLightning,
+      ...speedFactors,
       cloudCoverage,
       precipitationMultiplier,
       themeMode,
@@ -670,6 +687,7 @@ function init() {
       ? parseFloat(initCfg.rain_max_tilt_deg) : 30;
     const rainWindMinKmh = (initCfg.rain_wind_min_kmh != null && !isNaN(parseFloat(initCfg.rain_wind_min_kmh)))
       ? parseFloat(initCfg.rain_wind_min_kmh) : 3;
+    const initSpeedFactors = getSpeedFactors(initCfg);
     const initLightning = (effect === 'lightning' || effect === 'rain_storm') ? getLightningData() : null;
     const initSun = effect === 'sun_beams' ? getSunPosition() : null;
     const initEffectOpacity = {
@@ -696,7 +714,7 @@ function init() {
       lightningData: initLightning,
       lightningOverlay: effect === 'rain_storm' ? initLightning : null,
       sunPosition: initSun,
-      speed_factor_lightning: (initCfg.speed_factor_lightning != null && !isNaN(parseFloat(initCfg.speed_factor_lightning))) ? parseFloat(initCfg.speed_factor_lightning) : 1,
+      ...initSpeedFactors,
       cloudCoverage: getCloudCoverage(),
       precipitationMultiplier: getPrecipitationMultiplier(),
       themeMode: getThemeMode(),
@@ -714,6 +732,7 @@ function init() {
 
   setInterval(updateWeather, 1000);
   window.addEventListener('resize', handleResize);
+  window.addEventListener('fork-u-weather-force-update', () => { lastUpdateTime = 0; updateWeather(); });
 
   setInterval(() => {
     if (window.location.pathname !== lastPath) {

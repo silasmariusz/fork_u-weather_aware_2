@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌦️</text></svg>">
+  <title>Fork U – Weather Effects Test</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, sans-serif; background: #0a0a12; color: #e0e0e0; min-height: 100vh; }
+    #overlay-root { position: fixed; inset: 0; z-index: 1; width: 100%; height: 100%; }
+    #panel {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+      background: linear-gradient(transparent, rgba(0,0,0,0.9)); padding: 20px 16px 24px;
+      display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center;
+    }
+    .btn {
+      padding: 10px 16px; border-radius: 8px; border: 1px solid #444;
+      background: #1a1a24; color: #e0e0e0; cursor: pointer; font-size: 14px;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .btn:hover { background: #252530; border-color: #666; }
+    .btn.active { background: #2d5a87; border-color: #4a8bc2; }
+    .btn-group { display: flex; flex-wrap: wrap; gap: 6px; }
+    .section { margin-bottom: 12px; }
+    .section-title { font-size: 11px; color: #888; text-transform: uppercase; margin-bottom: 6px; }
+    #screenshot-btn { background: #1a4d1a; border-color: #2d7a2d; }
+    #screenshot-btn:hover { background: #2d6a2d; }
+    #toast {
+      position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 200;
+      padding: 12px 24px; background: #1a4d1a; border-radius: 8px; font-size: 14px;
+      opacity: 0; transition: opacity 0.3s; pointer-events: none;
+    }
+    #toast.show { opacity: 1; }
+    .controls-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+    .control { display: flex; flex-direction: column; gap: 4px; }
+    .control label { font-size: 12px; color: #aaa; }
+    .control select, .control input { padding: 6px 10px; border-radius: 6px; border: 1px solid #444; background: #1a1a24; color: #e0e0e0; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div id="overlay-root"></div>
+  <div id="panel">
+    <div class="section">
+      <div class="section-title">Efekt</div>
+      <div class="btn-group" id="effect-btns"></div>
+    </div>
+    <div class="section">
+      <div class="section-title">Debug - Atmosfera</div>
+      <div class="controls-row">
+        <div class="control">
+          <label>Opady (krople)</label>
+          <select id="debug-precipitation">
+            <option value="">Use sensors</option>
+            <option value="light">Light</option>
+            <option value="medium">Medium</option>
+            <option value="heavy">Heavy</option>
+          </select>
+        </div>
+        <div class="control">
+          <label>Wiatr - prędkość</label>
+          <select id="debug-wind-speed">
+            <option value="">Use sensors</option>
+            <option value="none">None (0 km/h)</option>
+            <option value="light">Light (~10 km/h)</option>
+            <option value="medium">Medium (~25 km/h)</option>
+            <option value="strong">Strong (~45 km/h)</option>
+          </select>
+        </div>
+        <div class="control">
+          <label>Wiatr - kierunek</label>
+          <select id="debug-wind-direction">
+            <option value="">Use sensors</option>
+            <option value="N">N</option>
+            <option value="NE">NE</option>
+            <option value="E">E</option>
+            <option value="SE">SE</option>
+            <option value="S">S</option>
+            <option value="SW">SW</option>
+            <option value="W">W</option>
+            <option value="NW">NW</option>
+          </select>
+        </div>
+        <div class="control">
+          <label>Aurora score (0–1)</label>
+          <input type="number" id="debug-aurora" min="0" max="1" step="0.1" value="1" placeholder="0.7" style="width:70px">
+        </div>
+        <div class="control">
+          <label>Aurora variant</label>
+          <select id="aurora-variant">
+            <option value="bands" selected>Bands</option>
+            <option value="northern-gradients">Northern Gradients</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title">Debug - Burza</div>
+      <div class="controls-row">
+        <div class="control">
+          <label>Odległość burzy (km)</label>
+          <input type="number" id="debug-lightning-distance" min="0" max="500" step="0.5" value="5" style="width:90px">
+        </div>
+        <div class="control">
+          <label>Licznik wyładowań</label>
+          <input type="number" id="debug-lightning-counter" min="0" step="1" value="0" style="width:80px">
+        </div>
+        <div class="control">
+          <label>Akcja</label>
+          <button class="btn" id="strike-plus-btn">+1 wyładowanie</button>
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title">Speed factors (0.1 - 3.0)</div>
+      <div class="controls-row">
+        <div class="control"><label>Rain</label><input type="number" id="speed-factor-rain" min="0.1" max="3" step="0.1" value="1" style="width:70px"></div>
+        <div class="control"><label>Snow</label><input type="number" id="speed-factor-snow" min="0.1" max="3" step="0.1" value="1" style="width:70px"></div>
+        <div class="control"><label>Clouds</label><input type="number" id="speed-factor-clouds" min="0.1" max="3" step="0.1" value="1" style="width:70px"></div>
+        <div class="control"><label>Fog</label><input type="number" id="speed-factor-fog" min="0.1" max="3" step="0.1" value="1" style="width:70px"></div>
+        <div class="control"><label>Smog</label><input type="number" id="speed-factor-smog" min="0.1" max="3" step="0.1" value="1" style="width:70px"></div>
+        <div class="control"><label>Hail</label><input type="number" id="speed-factor-hail" min="0.1" max="3" step="0.1" value="1" style="width:70px"></div>
+        <div class="control"><label>Lightning</label><input type="number" id="speed-factor-lightning" min="0.1" max="3" step="0.1" value="1" style="width:70px"></div>
+        <div class="control"><label>Stars</label><input type="number" id="speed-factor-stars" min="0.1" max="3" step="0.1" value="1" style="width:70px"></div>
+        <div class="control"><label>Matrix</label><input type="number" id="speed-factor-matrix" min="0.1" max="3" step="0.1" value="1" style="width:70px"></div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title">Scenariusze</div>
+      <div class="btn-group" id="scenario-btns">
+        <button class="btn scenario-btn" data-scenario="near-storm">Near storm</button>
+        <button class="btn scenario-btn" data-scenario="far-storm">Far storm</button>
+        <button class="btn scenario-btn" data-scenario="blizzard">Blizzard</button>
+        <button class="btn scenario-btn" data-scenario="fast-fog">Fast fog</button>
+        <button class="btn scenario-btn" data-scenario="reset-speeds">Reset speeds</button>
+      </div>
+    </div>
+    <div class="section">
+      <button class="btn" id="screenshot-btn">📷 Zrzut ekranu</button>
+    </div>
+  </div>
+  <div id="toast"></div>
+
+  <script>
+    (function() {
+      const ha = document.createElement('home-assistant');
+      ha.id = 'home-assistant';
+      ha.hass = { states: {} };
+      document.body.appendChild(ha);
+      const devCfg = {
+        development_mode: true,
+        test_effect: 'stars',
+        debug_precipitation_mm: 0,
+        debug_wind_speed: 'medium',
+        debug_wind_direction: 'W',
+        debug_lightning_distance: 5,
+        debug_lightning_counter: 0,
+        debug_aurora_score: 1,
+        aurora_variant: 'bands',
+        speed_factor_rain: 1,
+        speed_factor_snow: 1,
+        speed_factor_clouds: 1,
+        speed_factor_fog: 1,
+        speed_factor_smog: 1,
+        speed_factor_hail: 1,
+        speed_factor_lightning: 1,
+        speed_factor_stars: 1,
+        speed_factor_matrix: 1,
+      };
+      window.ForkUWeatherAwareConfig = Object.assign({}, window.ForkUWeatherAwareConfig || {}, devCfg);
+    })();
+  </script>
+  <script type="module" src="/src/test-entry.js"></script>
+</body>
+</html>
