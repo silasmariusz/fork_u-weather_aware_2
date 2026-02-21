@@ -131,6 +131,7 @@ export class WeatherEffectsCore {
     this.fogOverlay = null;
     this.auroraOverlay = null;
     this.renderTarget = null;
+    this.dropletsBackgroundTarget = null;
     this.maskScene = null;
     this.maskCamera = null;
     this.maskQuad = null;
@@ -342,6 +343,9 @@ export class WeatherEffectsCore {
     if (this.renderTarget) {
       this.renderTarget.setSize(this.viewportWidth, this.viewportHeight);
     }
+    if (this.dropletsBackgroundTarget) {
+      this.dropletsBackgroundTarget.setSize(this.viewportWidth, this.viewportHeight);
+    }
     this.devicePixelRatio = options.devicePixelRatio ?? 1;
     this.isMobile = options.isMobile ?? false;
     this.viewWidth = this.computeViewWidth(WEATHER_EFFECTS_VIEW_HEIGHT);
@@ -356,6 +360,11 @@ export class WeatherEffectsCore {
       this.currentEffect = 'none';
       this.setEffect(effect);
     }
+    this.smogOverlay?.onResize?.(this.viewWidth, this.viewHeight, this.isMobile, this.viewportWidth, this.viewportHeight);
+    this.windowDropletsOverlay?.onResize?.(this.viewWidth, this.viewHeight, this.isMobile, this.viewportWidth, this.viewportHeight);
+    this.lightningOverlay?.onResize?.(this.viewWidth, this.viewHeight, this.isMobile, this.viewportWidth, this.viewportHeight);
+    this.fogOverlay?.onResize?.(this.viewWidth, this.viewHeight, this.isMobile, this.viewportWidth, this.viewportHeight);
+    this.auroraOverlay?.onResize?.(this.viewWidth, this.viewHeight, this.isMobile, this.viewportWidth, this.viewportHeight);
   }
 
   destroy() {
@@ -363,6 +372,10 @@ export class WeatherEffectsCore {
     if (this.renderTarget) {
       this.renderTarget.dispose();
       this.renderTarget = null;
+    }
+    if (this.dropletsBackgroundTarget) {
+      this.dropletsBackgroundTarget.dispose();
+      this.dropletsBackgroundTarget = null;
     }
     if (this.maskQuad?.material) {
       this.maskQuad.material.dispose();
@@ -396,6 +409,15 @@ export class WeatherEffectsCore {
     this.fogOverlay?.update(delta, timestamp / 1000, this.effectExtras);
     this.auroraOverlay?.update(delta);
 
+    if (this.windowDropletsOverlay?.setBackgroundTexture) {
+      this.ensureDropletsBackgroundPass();
+      this.windowDropletsOverlay.setVisible(false);
+      this.renderer.setRenderTarget(this.dropletsBackgroundTarget);
+      this.renderer.render(this.scene, this.camera);
+      this.windowDropletsOverlay.setVisible(true);
+      this.windowDropletsOverlay.setBackgroundTexture(this.dropletsBackgroundTarget.texture);
+    }
+
     const useGradientMask = this.effectExtras.spatialMode === 'gradient-mask';
     if (useGradientMask) {
       this.ensureGradientMaskPass();
@@ -408,6 +430,17 @@ export class WeatherEffectsCore {
       this.renderer.render(this.maskScene, this.maskCamera);
     }
     this.animationFrame = requestFrame(this.renderLoop);
+  }
+
+  ensureDropletsBackgroundPass() {
+    if (this.dropletsBackgroundTarget) return;
+    this.dropletsBackgroundTarget = new THREE.WebGLRenderTarget(this.viewportWidth, this.viewportHeight, {
+      minFilter: THREE.LinearFilter,
+      magFilter: THREE.LinearFilter,
+      format: THREE.RGBAFormat,
+      type: THREE.UnsignedByteType,
+      stencilBuffer: false,
+    });
   }
 
   ensureGradientMaskPass() {
@@ -1191,156 +1224,121 @@ function createStarsEffect(ctx) {
   };
 }
 
-const MIN_DROPLET_DIST = 55;
-
 function createWindowDropletsOverlay(core) {
-  const viewW = core.viewWidth;
-  const viewH = core.viewHeight;
-  const { canvas: dropCanvas, ctx: dropCtx } = createDrawingSurface(
-    Math.max(256, Math.floor(core.viewportWidth / 2)),
-    Math.max(256, Math.floor(core.viewportHeight / 2))
-  );
-  const texture = createCanvasTexture(dropCanvas);
-  texture.minFilter = THREE.LinearFilter;
-  texture.magFilter = THREE.LinearFilter;
+  let viewW = core.viewWidth;
+  let viewH = core.viewHeight;
+  let viewportW = core.viewportWidth;
+  let viewportH = core.viewportHeight;
+  let geo = new THREE.PlaneGeometry(viewW, viewH);
+  const uniforms = {
+    uTime: { value: 0 },
+    uOpacity: { value: 0.9 * (core.opacity / 100) },
+    uRainAmount: { value: 0.75 },
+    uBackground: { value: null },
+    uViewSize: { value: new THREE.Vector2(viewW, viewH) },
+    uViewportSize: { value: new THREE.Vector2(viewportW, viewportH) },
+  };
+  const mat = new THREE.ShaderMaterial({
+    uniforms,
+    vertexShader: fogVertexShader,
+    fragmentShader: `
+      varying vec2 vUv;
+      uniform float uTime;
+      uniform float uOpacity;
+      uniform float uRainAmount;
+      uniform sampler2D uBackground;
+      uniform vec2 uViewportSize;
 
-  const geo = new THREE.PlaneGeometry(viewW, viewH);
-  const mat = new THREE.MeshBasicMaterial({
-    map: texture,
+      float random11(float x, float seed) {
+        return fract(sin(x * 345.456 + seed * 0.37) * 9831.517);
+      }
+      float random21(vec2 p, float seed) {
+        return fract(sin(dot(p, vec2(123.456, 43.12)) + seed * 0.13) * 15731.743);
+      }
+
+      vec3 dropsLayer(vec2 uv, float seed, float timeScale, float cellRes, float radius, float amp) {
+        float t = uTime * timeScale;
+        uv.y += random11(0.5, seed) + t;
+        uv *= cellRes;
+        float row = floor(uv.y);
+        uv.x += random11(row, seed + 6.17) * 1.7;
+        vec2 cell = floor(uv);
+        vec2 cellUv = fract(uv) - 0.5;
+        float shown = step(0.72, random21(cell, seed + 91.7));
+        float pulse = 1.0 - abs(fract(uTime * 0.11 + random21(cell, seed + 17.3) * 2.0) * 2.0 - 1.0);
+        pulse = clamp(pow(pulse, 4.0), 0.0, 1.0);
+        float dist = length(cellUv);
+        float inside = 1.0 - smoothstep(radius * 0.65, radius, dist);
+        float trail = smoothstep(-0.45, 0.05, cellUv.y) * (1.0 - smoothstep(0.05, 0.72, cellUv.y));
+        trail *= (1.0 - smoothstep(0.0, radius * 1.3, abs(cellUv.x)));
+        vec2 toCenter = normalize(-cellUv + vec2(0.0, 0.035));
+        vec2 refraction = toCenter * dist * dist * amp;
+        float alpha = (inside * 0.95 + trail * 0.35) * shown * (0.35 + 0.65 * pulse);
+        return vec3(refraction * alpha, alpha);
+      }
+
+      void main() {
+        vec2 uv = vUv;
+        vec3 l1 = dropsLayer(uv, 42424.43, 0.028, 10.0, 0.18, 0.13);
+        vec3 l2 = dropsLayer(uv * 1.15 + vec2(0.11, -0.07), 73214.91, 0.041, 13.0, 0.16, 0.11);
+        vec3 l3 = dropsLayer(uv * 0.92 + vec2(-0.08, 0.05), 21341.27, 0.022, 8.0, 0.2, 0.15);
+        vec2 refr = (l1.xy + l2.xy + l3.xy) * uRainAmount;
+        float mask = clamp((l1.z + l2.z + l3.z) * 0.75 * uRainAmount, 0.0, 1.0);
+
+        vec2 bgUv = gl_FragCoord.xy / max(uViewportSize, vec2(1.0));
+        bgUv = clamp(bgUv + refr, vec2(0.001), vec2(0.999));
+        vec4 bg = texture2D(uBackground, bgUv);
+
+        vec3 highlight = vec3(0.82, 0.9, 1.0) * mask * 0.26;
+        vec3 col = bg.rgb + highlight;
+        float alpha = clamp(mask * uOpacity * 0.85, 0.0, 1.0);
+        gl_FragColor = vec4(col, alpha);
+      }
+    `,
     transparent: true,
-    opacity: 0.95 * (core.opacity / 100),
     depthWrite: false,
+    depthTest: false,
+    blending: THREE.NormalBlending,
   });
   const mesh = new THREE.Mesh(geo, mat);
-  mesh.renderOrder = 5;
+  mesh.renderOrder = 60;
   const group = new THREE.Group();
   group.add(mesh);
 
-  const droplets = [];
-  let spawnTimer = 0;
-  let nextIntervalMs = 0;
-
-  function dropletOverlaps(x, y, size) {
-    for (const o of droplets) {
-      const dx = x - o.x;
-      const dy = y - o.y;
-      const minDist = MIN_DROPLET_DIST + (size + o.size) * 0.5;
-      if (dx * dx + dy * dy < minDist * minDist) return true;
-    }
-    return false;
-  }
-
-  function getSpawnInterval() {
-    return 2200 + Math.random() * 2800;
-  }
-
   return {
     group,
+    setBackgroundTexture(texture) {
+      uniforms.uBackground.value = texture;
+    },
+    setVisible(v) {
+      mesh.visible = !!v;
+    },
     update(delta) {
-      const W = dropCanvas.width;
-      const H = dropCanvas.height;
-      const dMs = Math.min(delta * 1000, 50);
-
-      spawnTimer += dMs;
-      if (nextIntervalMs <= 0) nextIntervalMs = getSpawnInterval();
-      if (spawnTimer >= nextIntervalMs) {
-        spawnTimer = 0;
-        nextIntervalMs = getSpawnInterval();
-        const sideZone = 0.18;
-        const leftMax = W * sideZone;
-        const rightMin = W * (1 - sideZone);
-        const side = Math.random() < 0.5 ? 'left' : 'right';
-        const size = 4 + Math.random() * 6;
-        let x, y;
-        let tries = 12;
-        do {
-          x = side === 'left' ? Math.random() * leftMax : rightMin + Math.random() * (W - rightMin);
-          y = Math.random() * H * 0.55;
-        } while (--tries > 0 && dropletOverlaps(x, y, size));
-        if (tries > 0) {
-          droplets.push({
-            x, y, size,
-            phase: 'appear',
-            opacity: 0,
-            life: 0,
-            appearDur: 300,
-            restDur: 2000 + Math.random() * 2500,
-            slideVel: 8 + Math.random() * 6,
-            slideAccel: 0.8 + Math.random() * 0.6,
-          });
-        }
+      uniforms.uTime.value += delta;
+      const precip = core.effectExtras?.precipitation;
+      const precipNum = typeof precip === 'number' ? precip : parseFloat(precip);
+      if (isFinite(precipNum)) {
+        uniforms.uRainAmount.value = THREE.MathUtils.clamp(0.45 + (precipNum / 22), 0.45, 1.0);
       }
-
-      dropCtx.clearRect(0, 0, W, H);
-
-      for (let i = droplets.length - 1; i >= 0; i--) {
-        const d = droplets[i];
-        d.life += dMs;
-
-        if (d.phase === 'appear') {
-          d.opacity = Math.min(1, (d.life / d.appearDur) * 1.8);
-          if (d.life >= d.appearDur) {
-            d.phase = 'rest';
-            d.life = 0;
-            d.opacity = 1;
-          }
-        } else if (d.phase === 'rest') {
-          if (d.life >= d.restDur) {
-            d.phase = 'slide';
-            d.life = 0;
-          }
-        } else {
-          const dt = dMs / 1000;
-          d.slideVel = (d.slideVel || 8) + d.slideAccel * dt * 60;
-          d.y += d.slideVel * dt;
-          const frac = d.y / H;
-          d.opacity = frac < 0.85 ? 1 : Math.max(0, (1 - frac) / 0.15);
-          if (d.y > H + d.size * 2) {
-            droplets.splice(i, 1);
-            continue;
-          }
-        }
-
-        if (d.y <= H + d.size * 2) {
-          dropCtx.save();
-          dropCtx.globalAlpha = d.opacity;
-          const grad = dropCtx.createRadialGradient(
-            d.x - d.size * 0.3, d.y - d.size * 0.3, 0,
-            d.x, d.y, d.size * 1.5
-          );
-          grad.addColorStop(0, 'rgba(230, 240, 255, 0.42)');
-          grad.addColorStop(0.4, 'rgba(200, 218, 242, 0.28)');
-          grad.addColorStop(0.75, 'rgba(170, 190, 215, 0.12)');
-          grad.addColorStop(1, 'rgba(150, 170, 195, 0)');
-          dropCtx.fillStyle = grad;
-          dropCtx.beginPath();
-          dropCtx.ellipse(d.x, d.y, d.size * 0.5, d.size * 1.1, 0, 0, Math.PI * 2);
-          dropCtx.fill();
-          const hl = dropCtx.createRadialGradient(
-            d.x - d.size * 0.25, d.y - d.size * 0.4, 0,
-            d.x - d.size * 0.25, d.y - d.size * 0.4, d.size * 0.6
-          );
-          hl.addColorStop(0, `rgba(255,255,255,${0.32 * d.opacity})`);
-          hl.addColorStop(0.55, `rgba(255,255,255,${0.1 * d.opacity})`);
-          hl.addColorStop(1, 'rgba(255,255,255,0)');
-          dropCtx.fillStyle = hl;
-          dropCtx.beginPath();
-          dropCtx.ellipse(d.x - d.size * 0.2, d.y - d.size * 0.35, d.size * 0.35, d.size * 0.4, 0, 0, Math.PI * 2);
-          dropCtx.fill();
-          dropCtx.restore();
-        }
-      }
-
-      texture.needsUpdate = true;
     },
     setOpacity(v) {
       const dropletsMult = core.effectExtras?.effectOpacity?.droplets ?? 1;
-      mat.opacity = 0.95 * Math.max(0, Math.min(1, v / 100)) * dropletsMult;
+      uniforms.uOpacity.value = 0.9 * Math.max(0, Math.min(1, v / 100)) * dropletsMult;
+    },
+    onResize(w, h, _isMobile, vw, vh) {
+      viewW = w;
+      viewH = h;
+      viewportW = vw ?? viewportW;
+      viewportH = vh ?? viewportH;
+      geo.dispose();
+      geo = new THREE.PlaneGeometry(viewW, viewH);
+      mesh.geometry = geo;
+      uniforms.uViewSize.value.set(viewW, viewH);
+      uniforms.uViewportSize.value.set(viewportW, viewportH);
     },
     dispose() {
       geo.dispose();
       mat.dispose();
-      texture.dispose();
     },
   };
 }
