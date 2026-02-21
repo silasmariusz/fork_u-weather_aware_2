@@ -86,9 +86,11 @@
 ## 6. PLATFORMA TESTOWA / ZRZUTY EKRANU
 
 **Zadania:**
-- [ ] **6.1** Stworzyć prostą stronę HTML (np. `dev/test-effects.html`) z przyciskami do przełączania efektów (clear-night, rain, aurora, sun, clouds).
-- [ ] **6.2** Możliwość generowania zrzutów ekranu (np. `html2canvas` lub `canvas.toDataURL`) dla weryfikacji wizualnej.
+- [x] **6.1** Stworzyć prostą stronę HTML (`index.html`) z przyciskami do przełączania efektów (clear-night, rain, aurora, sun, clouds, fog, snow, storm).
+- [x] **6.2** Możliwość generowania zrzutów ekranu (`canvas.toDataURL`) dla weryfikacji wizualnej.
 - [ ] **6.3** Porównanie z referencjami – side-by-side lub overlay.
+
+**Uruchomienie:** `npm run serve` – serwer dev na http://localhost:5173
 
 ---
 
