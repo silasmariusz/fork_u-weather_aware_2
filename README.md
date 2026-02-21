@@ -47,12 +47,16 @@ Features
   - ❄️ Snowy (classic particles) and **Snowy2** (layered, mobile‑aware)
   - 🌙 Clear night (stars + moon glow from moon sensors)
   - ☀️ Sunny / UV aware sun glow (color & intensity from UV index)
-  - ⛈️ Lightning & lightning‑rainy (distance‑aware flashes)
+  - ⛈️ Lightning & lightning‑rainy (strike-counter triggered flashes with distance-aware delay)
   - 🧊 Hail (rarer, “meteor‑like” impacts)
 
 - **Gaming / Matrix mode**
   - Dedicated **gaming_mode_entity** (`binary_sensor` / `input_boolean`).
   - Option **“Matrix only (no weather background)”** for pure ambient cyberpunk layer.
+
+- **Per-effect speed factors**
+  - `speed_factor_rain`, `speed_factor_snow`, `speed_factor_clouds`, `speed_factor_fog`, `speed_factor_smog`, `speed_factor_hail`, `speed_factor_lightning`, `speed_factor_stars`, `speed_factor_matrix`
+  - Spatial-aware behavior is preserved across `background`, `bubble`, `gradient-mask`, and `foreground` modes.
 
 - **Mobile & performance options**
   - Limit canvas DPR on mobile,
@@ -184,8 +188,13 @@ snowy_variant: snowy2
 spatial_mode: gradient-mask  # or background / bubble / foreground
 ```
 
+**Standalone test platform:** Run `npm run serve` and open http://localhost:5173 to switch effects and take screenshots without Home Assistant.
+
 - Switch `spatial_mode` to **`bubble`** to test Bubble‑aware backdrop integration.
 - Use `gaming_matrix_only: true` to see pure Matrix effect during sandbox testing.
+- Use debug controls for wind direction/speed, lightning distance/counter, and all speed factors.
+- **Lightning / burza:** Wybierz efekt **Lightning** lub **Lightning-rainy** / **Storm**, ustaw **Odległość burzy (km)** i kliknij **+1 wyładowanie** – błysk natychmiast + opóźniony strobe (~2,9 s/km). Działające parametry: `debug_lightning_distance`, `debug_lightning_counter`, przycisk zwiększa licznik i wywołuje błysk.
+- Use scenario presets (`near-storm`, `far-storm`, `blizzard`, `fast-fog`) for quick regression checks.
 
 Example – Real live weather setup (UI Editor)
 ---------------------------------------------
@@ -266,7 +275,7 @@ These are optional but unlock more advanced behaviour:
 - **Lunar Phase (3 sensors)** – for the Lunar Phase integration: enter **Moon Azimuth**, **Moon Altitude**, and **Moon Distance**.
 - **Gaming mode** (`input_boolean` or `binary_sensor`) – when ON, displays a Matrix‑style cyberpunk overlay (falling characters).
 - **Smog alert** – when PM2.5 or PM4 (µg/m³) exceed thresholds, fog rises from the bottom. Uses Google Air Quality API sensors. PM4 is important for Cystic Fibrosis awareness. Effect is drawn on top of all others, does not block clicks.
-- **Lightning data** – distance and strike count for timed strobes and distance‑based strength.
+- **Lightning data** – distance and strike count for immediate flash + delayed strobe timing (`delay = distance_km × 1000/343`, about `2.915 s/km`).
 - **Aurora (Northern Lights)** – on **clear-night**, aurora in the header when visibility score exceeds threshold. Two styles: **Bands** (colored header stripes) or **Bubble Northern Gradients** (soft flowing curtains, [CodePen inspiration](https://codepen.io/silasmariusz/pen/YPWMMow)). Uses NOAA Aurora Forecast (`aurora_chance_entity`), optional `aurora_visibility_alert_entity`, `cloud_coverage_entity`, `sun_entity`, and optionally `k_index_entity` (planetary Kp). Visibility Score = Aurora Chance × Sky Clarity × Darkness Factor × (optional K-index boost).
 
 ### Sensors and their impact
@@ -276,13 +285,13 @@ These are optional but unlock more advanced behaviour:
 | `cloud_coverage_entity` | Cloud & fog density (0–100%); aurora sky clarity |
 | `cloud_speed_multiplier` | Cloud animation speed |
 | `precipitation_entity` | Rain speed multiplier (mm/h) |
-| `wind_speed_entity` | Rain/snow tilt, cloud drift |
+| `wind_speed_entity` | Rain/snow tilt and fall-rate multiplier, cloud drift (hail direction excluded) |
 | `wind_direction_entity` | Rain/snow bearing, wind sway |
 | `rain_max_tilt_deg` | Max rain tilt from wind (default 30°) |
 | `rain_wind_min_kmh` | Wind speed threshold for tilt (default 3 km/h) |
 | `uv_index_entity` | Sun glow color (6+ → orange) |
 | `pm25_entity`, `pm4_entity`, `pm10_entity` | Smog fog when above thresholds |
-| `lightning_counter_entity`, `lightning_distance_entity` | Lightning flash timing & distance |
+| `lightning_counter_entity`, `lightning_distance_entity` | Lightning trigger (`+1` counter) and delayed strobe timing (~`2.915 s/km`) |
 | `aurora_chance_entity` | Aurora visibility chance (0–100%), header effect on clear-night |
 | `aurora_variant` | `bands` (stripes) or `northern-gradients` (Bubble Northern Gradients) |
 | `aurora_visibility_alert_entity` | Optional shortcut: ON = high chance |

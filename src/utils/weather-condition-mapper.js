@@ -20,7 +20,7 @@ export function mapWeatherStateToEffect(weatherState) {
   if (s === 'fog' || s === 'foggy') return 'fog_light';
   if (s === 'sunny' || s === 'clear') return 'sun_beams';
   if (s === 'sunny2') return 'sun_beams';
-  if (s === 'clear-night' || s === 'clear_night') return 'stars';
+  if (s === 'clear-night' || s === 'clear_night' || s === 'stars') return 'stars';
   if (s === 'cloudy' || s === 'partlycloudy' || s === 'partly-cloudy' || s === 'partly_cloudy') return 'clouds';
   if (s === 'windy-variant' || s === 'windy_variant') return 'clouds';
   if (s === 'windy') return 'clouds';
