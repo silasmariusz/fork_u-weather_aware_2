@@ -2027,7 +2027,8 @@ function createLightningEffect(ctx) {
   group.add(screenFlashMesh);
 
   const THUNDER_DELAY_SEC_PER_KM = 2.25;
-  const BURST_SPACING_SEC = 0.1;
+  const BURST_SPACING_SEC = 0.08;
+  const SENSOR_QUEUE_COOLDOWN_SEC = 0.8;
   const MAX_FLASH_QUEUE_SIZE = 24;
   let lightningTimer = THREE.MathUtils.randFloat(1, 3);
   let flashTimer = 0;
@@ -2036,14 +2037,19 @@ function createLightningEffect(ctx) {
   const normOp = Math.max(0.0001, Math.min(1, ctx.opacity / 100));
 
   const ZIGZAG_DURATION_SEC = 0.02;
-  const ZIGZAG_SPACING_SEC = 0.03;
+  const ZIGZAG_SPACING_SEC = 0.025;
+  const STRIKE_ZIGZAG_INTENSITY = 2.8;
+  const THUNDER_ZIGZAG_INTENSITY = 1.15;
   let zigzagTimer = 0;
+  let zigzagIntensity = 1;
+  let lastSensorBurstAt = -Infinity;
 
-  const triggerZigzagOnly = () => {
+  const triggerZigzagOnly = (intensity = 1) => {
     if (zigzagTimer > 0) return;
     lightningUniforms.uBoltThin.value = 1;
     lightningUniforms.uFlash.value = 1;
     lightningUniforms.uOrigin.value.set(THREE.MathUtils.randFloat(0.6, 0.95), THREE.MathUtils.randFloat(0.85, 1.05));
+    zigzagIntensity = Math.max(0.8, intensity);
     zigzagTimer = ZIGZAG_DURATION_SEC;
   };
 
@@ -2068,14 +2074,15 @@ function createLightningEffect(ctx) {
   };
 
   const queueSensorBursts = (strikesToTrigger, distanceKm, nowSec) => {
-    const strikeCount = Math.max(1, Math.min(5, Math.floor(strikesToTrigger || 0)));
+    const strikeCount = Math.max(1, Math.min(2, Math.floor(strikesToTrigger || 0)));
     const safeDistanceKm = Math.max(0, isFinite(distanceKm) ? distanceKm : 0);
     const thunderDelaySec = safeDistanceKm * THUNDER_DELAY_SEC_PER_KM;
+    // First hit must be very short and single, otherwise it looks like "dancing current".
+    queueFlashAt(nowSec, 'zigzag-strike');
     for (let i = 0; i < strikeCount; i++) {
-      queueFlashAt(nowSec + i * ZIGZAG_SPACING_SEC, 'zigzag');
-    }
-    for (let i = 0; i < strikeCount; i++) {
-      queueFlashAt(nowSec + thunderDelaySec + i * BURST_SPACING_SEC, 'strobe', safeDistanceKm);
+      const t = nowSec + thunderDelaySec + i * BURST_SPACING_SEC;
+      queueFlashAt(t, 'thunder-zigzag');
+      queueFlashAt(t + ZIGZAG_SPACING_SEC, 'strobe', safeDistanceKm);
     }
   };
 
@@ -2085,13 +2092,15 @@ function createLightningEffect(ctx) {
       const ld = extras?.lightningData;
       const speedFac = getSafeSpeedFactor(extras?.speed_factor_lightning, 1);
 
-      if (ld?.strikesToTrigger > 0) {
+      if (ld?.strikesToTrigger > 0 && (time - lastSensorBurstAt) >= SENSOR_QUEUE_COOLDOWN_SEC) {
+        lastSensorBurstAt = time;
         queueSensorBursts(ld.strikesToTrigger, ld.distanceKm, time);
       }
 
       while (flashQueue.length && flashQueue[0].at <= time) {
         const entry = flashQueue.shift();
-        if (entry.type === 'zigzag') triggerZigzagOnly();
+        if (entry.type === 'zigzag-strike') triggerZigzagOnly(STRIKE_ZIGZAG_INTENSITY);
+        else if (entry.type === 'thunder-zigzag') triggerZigzagOnly(THUNDER_ZIGZAG_INTENSITY);
         else triggerStrobe(entry.distanceKm);
       }
 
@@ -2108,9 +2117,12 @@ function createLightningEffect(ctx) {
       if (zigzagTimer > 0) {
         zigzagTimer -= delta;
         const nt = Math.max(0, zigzagTimer / ZIGZAG_DURATION_SEC);
-        lightningUniforms.uFlash.value = nt * normOp;
+        lightningUniforms.uFlash.value = Math.min(1, nt * normOp * zigzagIntensity);
         lightningUniforms.uBoltThin.value = 1;
-        if (zigzagTimer <= 0) lightningUniforms.uBoltThin.value = 0;
+        if (zigzagTimer <= 0) {
+          lightningUniforms.uBoltThin.value = 0;
+          zigzagIntensity = 1;
+        }
       } else if (flashTimer > 0) {
         lightningUniforms.uBoltThin.value = 0;
         flashTimer -= delta;
