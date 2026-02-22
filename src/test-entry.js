@@ -16,6 +16,7 @@ const EFFECTS = [
   { id: 'rain_drizzle', label: 'Drizzle', testEffect: 'rainy-drizzle' },
   { id: 'snow_gentle', label: 'Snow', testEffect: 'snowy' },
   { id: 'snow_storm', label: 'Snow storm', testEffect: 'snowy-rainy' },
+  { id: 'hail', label: 'Hail', testEffect: 'hail' },
   { id: 'fog_light', label: 'Fog', testEffect: 'fog' },
 ];
 
@@ -75,6 +76,36 @@ const SCENARIOS = {
       'speed-factor-fog': 2.5,
       'speed-factor-clouds': 1.8,
       'speed-factor-smog': 1.6,
+    },
+  },
+  'humid-fog': {
+    effect: 'fog',
+    controls: {
+      'debug-cloud-coverage': 85,
+      'debug-humidity': 92,
+      'humidity-fog-weight': 0.55,
+      'speed-factor-fog': 1.2,
+      'speed-factor-clouds': 1.1,
+    },
+    config: {
+      debug_precipitation: null,
+      debug_wind_speed: 'light',
+      debug_wind_direction: 'E',
+    },
+  },
+  'dry-air': {
+    effect: 'cloudy',
+    controls: {
+      'debug-cloud-coverage': 45,
+      'debug-humidity': 20,
+      'humidity-fog-weight': 0.55,
+      'speed-factor-fog': 1,
+      'speed-factor-clouds': 1,
+    },
+    config: {
+      debug_precipitation: null,
+      debug_wind_speed: 'light',
+      debug_wind_direction: 'W',
     },
   },
   'reset-speeds': {
@@ -162,6 +193,9 @@ function updateDebugFromControls() {
   const windDirection = document.getElementById('debug-wind-direction');
   const lightningDistance = document.getElementById('debug-lightning-distance');
   const lightningCounter = document.getElementById('debug-lightning-counter');
+  const cloudCoverage = document.getElementById('debug-cloud-coverage');
+  const humidity = document.getElementById('debug-humidity');
+  const humidityFogWeight = document.getElementById('humidity-fog-weight');
   const aurora = document.getElementById('debug-aurora');
   const variant = document.getElementById('aurora-variant');
   const updates = {};
@@ -181,6 +215,17 @@ function updateDebugFromControls() {
 
   const lightningCounterValue = parseInt(lightningCounter?.value || '', 10);
   updates.debug_lightning_counter = !isNaN(lightningCounterValue) ? lightningCounterValue : null;
+
+  const cloudCoverageValue = parseFloat(cloudCoverage?.value || '');
+  updates.debug_cloud_coverage = !isNaN(cloudCoverageValue) ? Math.max(0, Math.min(100, cloudCoverageValue)) : null;
+
+  const humidityValue = parseFloat(humidity?.value || '');
+  updates.debug_humidity = !isNaN(humidityValue) ? Math.max(0, Math.min(100, humidityValue)) : null;
+
+  const humidityFogWeightValue = parseFloat(humidityFogWeight?.value || '');
+  updates.humidity_fog_weight = !isNaN(humidityFogWeightValue)
+    ? Math.max(0, Math.min(1, humidityFogWeightValue))
+    : 0.35;
 
   if (aurora?.value !== '' && !isNaN(parseFloat(aurora.value))) {
     updates.debug_aurora_score = parseFloat(aurora.value);
@@ -206,6 +251,9 @@ function applyScenario(scenarioId) {
   Object.entries(scenario.controls || {}).forEach(([id, value]) => {
     setControlValue(id, value);
   });
+  if (scenario.config) {
+    setCfg(scenario.config);
+  }
   if (scenario.strikeIncrement) {
     const counterEl = document.getElementById('debug-lightning-counter');
     const current = parseInt(counterEl?.value || '0', 10) || 0;
@@ -238,6 +286,9 @@ function init() {
   setControlValue('debug-wind-direction', cfg.debug_wind_direction || '');
   setControlValue('debug-lightning-distance', cfg.debug_lightning_distance ?? '');
   setControlValue('debug-lightning-counter', cfg.debug_lightning_counter ?? '');
+  setControlValue('debug-cloud-coverage', cfg.debug_cloud_coverage ?? '');
+  setControlValue('debug-humidity', cfg.debug_humidity ?? '');
+  setControlValue('humidity-fog-weight', cfg.humidity_fog_weight ?? 0.35);
   setControlValue('debug-aurora', cfg.debug_aurora_score ?? '');
   setControlValue('aurora-variant', cfg.aurora_variant || 'bands');
   SPEED_FACTOR_CONTROLS.forEach(({ id, key }) => {
@@ -256,6 +307,9 @@ function init() {
   document.getElementById('debug-wind-direction')?.addEventListener('change', refreshOnChange);
   document.getElementById('debug-lightning-distance')?.addEventListener('input', refreshOnChange);
   document.getElementById('debug-lightning-counter')?.addEventListener('input', refreshOnChange);
+  document.getElementById('debug-cloud-coverage')?.addEventListener('input', refreshOnChange);
+  document.getElementById('debug-humidity')?.addEventListener('input', refreshOnChange);
+  document.getElementById('humidity-fog-weight')?.addEventListener('input', refreshOnChange);
   document.getElementById('debug-aurora')?.addEventListener('input', refreshOnChange);
   document.getElementById('aurora-variant')?.addEventListener('change', refreshOnChange);
   SPEED_FACTOR_CONTROLS.forEach(({ id }) => {

@@ -298,6 +298,56 @@ function getCloudCoverage() {
   return null;
 }
 
+function getHumidity() {
+  const cfg = window.ForkUWeatherAwareConfig || {};
+  const ha = getHomeAssistant();
+  const WEATHER_ENTITY = getWeatherEntityId();
+  if (cfg.development_mode && cfg.debug_humidity != null && String(cfg.debug_humidity).trim() !== '') {
+    const v = parseFloat(cfg.debug_humidity);
+    if (!isNaN(v)) return Math.max(0, Math.min(100, v));
+  }
+  if (!ha?.hass) return null;
+  if (cfg.humidity_entity) {
+    const e = ha.hass.states[cfg.humidity_entity];
+    if (e?.state && e.state !== 'unavailable' && e.state !== 'unknown') {
+      const v = parseFloat(e.state);
+      if (!isNaN(v)) return Math.max(0, Math.min(100, v));
+    }
+  }
+  const we = ha.hass.states[WEATHER_ENTITY];
+  if (we?.attributes?.humidity != null) {
+    const v = parseFloat(we.attributes.humidity);
+    if (!isNaN(v)) return Math.max(0, Math.min(100, v));
+  }
+  return null;
+}
+
+/** 0..1: estimated fog from humidity + cloud coverage + PM2.5 (no weather entity check). */
+function getEstimatedFogScore() {
+  const humidity = getHumidity();
+  const cloudCoverage = getCloudCoverage();
+  const cfg = window.ForkUWeatherAwareConfig || {};
+  const ha = getHomeAssistant();
+  const thresh25 = cfg.smog_threshold_pm25 ?? 35;
+  let pm25Norm = 0;
+  if (cfg.pm25_entity && ha?.hass?.states) {
+    const e = ha.hass.states[cfg.pm25_entity];
+    if (e?.state !== 'unavailable' && e?.state !== 'unknown') {
+      const v = parseFloat(e.state);
+      if (!isNaN(v) && v > 0) pm25Norm = Math.min(1, v / Math.max(thresh25, 1));
+    }
+  }
+  const h = humidity != null ? humidity / 100 : 0.5;
+  const c = cloudCoverage != null ? cloudCoverage / 100 : 0.5;
+  const humidityWeightRaw = parseFloat(cfg.humidity_fog_weight);
+  const humidityWeight = isNaN(humidityWeightRaw) ? 0.35 : Math.max(0, Math.min(1, humidityWeightRaw));
+  const remainingWeight = 1 - humidityWeight;
+  const cloudWeight = remainingWeight * (0.4 / 0.65);
+  const pmWeight = remainingWeight * (0.25 / 0.65);
+  const score = humidityWeight * h + cloudWeight * c + pmWeight * pm25Norm;
+  return Math.max(0, Math.min(1, score));
+}
+
 function getPrecipitationMultiplier() {
   const cfg = window.ForkUWeatherAwareConfig || {};
   const ha = getHomeAssistant();
@@ -592,6 +642,11 @@ function updateWeather() {
   const cloudCoverage = getCloudCoverage();
   const precipitationMultiplier = getPrecipitationMultiplier();
   const themeMode = getThemeMode();
+  const weatherSaysFog = currentWeather === 'fog' || currentWeather === 'foggy';
+  const estimatedFogScore = getEstimatedFogScore();
+  const fogIntensity = weatherSaysFog
+    ? 1
+    : (estimatedFogScore > 0.25 ? Math.max(0.25, Math.min(0.85, estimatedFogScore)) : 0);
   const cloudSpeedMult = (cfg.cloud_speed_multiplier != null && !isNaN(parseFloat(cfg.cloud_speed_multiplier)))
     ? Math.max(0.1, Math.min(3, parseFloat(cfg.cloud_speed_multiplier))) : 1;
   const effectOpacity = {
@@ -624,9 +679,13 @@ function updateWeather() {
       precipitationMultiplier,
       themeMode,
       cloudSpeedMultiplier: cloudSpeedMult,
+      fogIntensity,
       auroraOverlay,
       auroraVisibilityScore,
       auroraVariant: (window.ForkUWeatherAwareConfig || {}).aurora_variant || 'bands',
+      moonTextureUrl: (window.ForkUWeatherAwareConfig || {}).moon_texture_url || null,
+      moonNormalUrl: (window.ForkUWeatherAwareConfig || {}).moon_normal_url || null,
+      moonOpacityMax: (window.ForkUWeatherAwareConfig || {}).moon_opacity_max ?? 0.5,
     });
   }
 }
@@ -721,6 +780,9 @@ function init() {
       cloudSpeedMultiplier: (initCfg.cloud_speed_multiplier != null && !isNaN(parseFloat(initCfg.cloud_speed_multiplier))) ? Math.max(0.1, Math.min(3, parseFloat(initCfg.cloud_speed_multiplier))) : 1,
       auroraOverlay: effect === 'stars' && getAuroraVisibilityScore() > 0,
       auroraVisibilityScore: effect === 'stars' ? getAuroraVisibilityScore() : 0,
+      moonTextureUrl: (window.ForkUWeatherAwareConfig || {}).moon_texture_url || null,
+      moonNormalUrl: (window.ForkUWeatherAwareConfig || {}).moon_normal_url || null,
+      moonOpacityMax: (window.ForkUWeatherAwareConfig || {}).moon_opacity_max ?? 0.5,
       auroraVariant: (window.ForkUWeatherAwareConfig || {}).aurora_variant || 'bands',
     });
   }

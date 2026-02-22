@@ -167,12 +167,14 @@ debug_wind_direction: W
 debug_lightning_distance: "3"
 debug_lightning_counter: "60"
 debug_cloud_coverage: "80"
+debug_humidity: "85"
 
 # Rain / wind behaviour
 cloud_speed_multiplier: 1
 rain_max_tilt_deg: 30
 rain_wind_min_kmh: 3
 wind_sway_factor: 0.7
+humidity_fog_weight: 0.35  # 0..1 contribution of humidity to estimated fog
 
 # Theme (usually left null → auto)
 theme_mode: null
@@ -210,6 +212,7 @@ spatial_mode: gradient-mask  # or background / bubble / foreground
 - **Lightning / burza:** Wybierz efekt **Lightning** lub **Lightning-rainy** / **Storm**, ustaw **Odległość burzy (km)** i kliknij **+1 wyładowanie** – błysk natychmiast + opóźniony strobe (~2,9 s/km). Działające parametry: `debug_lightning_distance`, `debug_lightning_counter`, przycisk zwiększa licznik i wywołuje błysk.
 - Use scenario presets (`near-storm`, `far-storm`, `blizzard`, `fast-fog`) for quick regression checks.
 - **Parametry zweryfikowane na platformie testowej:** `development_mode`, `test_effect` (w tym Clear night, Lightning, Lightning-rainy, Storm), `debug_precipitation`, `debug_wind_speed`, `debug_wind_direction`, `debug_lightning_distance`, `debug_lightning_counter`, przycisk „+1 wyładowanie”, wszystkie `speed_factor_*`, presety scenariuszy.
+- **Humidity testing:** use `debug_humidity` and `humidity_fog_weight` (plus cloud coverage) to validate fog sensitivity and transitions.
 
 Example – Real live weather setup (UI Editor)
 ---------------------------------------------
@@ -249,6 +252,7 @@ smog_threshold_pm10: 25
 
 # Wind & clouds
 cloud_coverage_entity: sensor.openweathermap_cloud_coverage
+humidity_entity: sensor.openweathermap_humidity
 wind_speed_entity: sensor.openweathermap_wind_speed
 wind_direction_entity: sensor.openweathermap_wind_directions
 
@@ -262,6 +266,7 @@ lightning_distance_entity: sensor.dom_lightning_distance
 # Optional tuning (defaults shown)
 drizzle_precipitation_max: 2.5
 wind_sway_factor: 0.7
+humidity_fog_weight: 0.35
 speed_factor_rain: 1
 speed_factor_snow: 1
 speed_factor_clouds: 1
@@ -293,6 +298,7 @@ These are optional but unlock more advanced behaviour:
   `moon_normal_url: /hacsfiles/fork_u_weather_aware_2/assets/moon_normal.png` (set `/local/...` paths for manual install).
 - **UV index entity** (default: `sensor.uv_index`) – high UV (6+) gives a deep orange sun glow; normal UV gives a gentle yellow glow. Falls back to weather entity `uv_index` attribute if available.
 - **Moon position entity** (optional) – single sensor with attributes: `azimuth`, `elevation`/`altitude`, `distance`. Use with Moon Astro or similar. If not available, use Lunar Phase sensors below.
+- **Humidity entity** (`humidity_entity`, optional) – if set, this value participates in fog estimation together with cloud coverage and PM2.5.
 - **Lunar Phase (3 sensors)** – for the Lunar Phase integration: enter **Moon Azimuth**, **Moon Altitude**, and **Moon Distance**.
 - **Gaming mode** (`input_boolean` or `binary_sensor`) – when ON, displays a Matrix‑style cyberpunk overlay (falling characters).
 - **Smog alert** – when PM2.5 or PM4 (µg/m³) exceed thresholds, fog rises from the bottom. Uses Google Air Quality API sensors. PM4 is important for Cystic Fibrosis awareness. Effect is drawn on top of all others, does not block clicks.
@@ -304,6 +310,8 @@ These are optional but unlock more advanced behaviour:
 | Sensor | Effect / use |
 |--------|---------------|
 | `cloud_coverage_entity` | Cloud & fog density (0–100%); aurora sky clarity |
+| `humidity_entity` | Humidity (0–100%) used in estimated fog intensity |
+| `humidity_fog_weight` | Relative weight of humidity in fog estimation (0–1, default `0.35`) |
 | `cloud_speed_multiplier` | Cloud animation speed |
 | `precipitation_entity` | Rain speed multiplier (mm/h) |
 | `wind_speed_entity` | Rain/snow tilt and fall-rate multiplier, cloud drift (hail direction excluded) |
@@ -349,12 +357,14 @@ smog_threshold_pm10: 50
 
 # Wind & clouds (direction, tilt, cloud density & speed)
 cloud_coverage_entity: sensor.cloud_coverage
+humidity_entity: sensor.humidity
 cloud_speed_multiplier: 1
 wind_speed_entity: sensor.wind_speed
 wind_direction_entity: sensor.wind_direction
 rain_max_tilt_deg: 30
 rain_wind_min_kmh: 3
 wind_sway_factor: 0.7
+humidity_fog_weight: 0.35
 
 # Precipitation (rain speed multiplier)
 precipitation_entity: sensor.precipitation

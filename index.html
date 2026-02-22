@@ -86,6 +86,18 @@
           <input type="number" id="debug-aurora" min="0" max="1" step="0.1" value="1" placeholder="0.7" style="width:70px">
         </div>
         <div class="control">
+          <label>Cloud coverage (%)</label>
+          <input type="number" id="debug-cloud-coverage" min="0" max="100" step="1" value="" placeholder="Use sensors" style="width:110px">
+        </div>
+        <div class="control">
+          <label>Humidity (%)</label>
+          <input type="number" id="debug-humidity" min="0" max="100" step="1" value="" placeholder="Use sensors" style="width:110px">
+        </div>
+        <div class="control">
+          <label>Humidity fog weight</label>
+          <input type="number" id="humidity-fog-weight" min="0" max="1" step="0.05" value="0.35" style="width:90px">
+        </div>
+        <div class="control">
           <label>Aurora variant</label>
           <select id="aurora-variant">
             <option value="bands" selected>Bands</option>
@@ -132,6 +144,8 @@
         <button class="btn scenario-btn" data-scenario="far-storm">Far storm</button>
         <button class="btn scenario-btn" data-scenario="blizzard">Blizzard</button>
         <button class="btn scenario-btn" data-scenario="fast-fog">Fast fog</button>
+        <button class="btn scenario-btn" data-scenario="humid-fog">Humid fog</button>
+        <button class="btn scenario-btn" data-scenario="dry-air">Dry air</button>
         <button class="btn scenario-btn" data-scenario="reset-speeds">Reset speeds</button>
       </div>
     </div>
@@ -155,6 +169,9 @@
         debug_wind_direction: 'W',
         debug_lightning_distance: 5,
         debug_lightning_counter: 0,
+        debug_cloud_coverage: null,
+        debug_humidity: null,
+        humidity_fog_weight: 0.35,
         debug_aurora_score: 1,
         aurora_variant: 'bands',
         speed_factor_rain: 1,

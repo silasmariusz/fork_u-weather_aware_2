@@ -35,6 +35,7 @@
     debug_lightning_counter: null,
     debug_cloud_coverage: null,
     debug_humidity: null,
+    humidity_fog_weight: 0.35,
     cloud_speed_multiplier: 1,
     wind_sway_factor: 0.7,
     spatial_mode: 'foreground',
@@ -307,6 +308,7 @@
       set('enable_aurora_effect', cfg.enable_aurora_effect);
       set('debug_aurora_score', cfg.debug_aurora_score);
       set('cloud_speed_multiplier', cfg.cloud_speed_multiplier);
+      set('humidity_fog_weight', cfg.humidity_fog_weight);
       set('wind_sway_factor', cfg.wind_sway_factor);
       set('rain_max_tilt_deg', cfg.rain_max_tilt_deg);
       set('rain_wind_min_kmh', cfg.rain_wind_min_kmh);
@@ -541,6 +543,10 @@
             <div class="form-row">
               <label>Wind sway factor</label>
               <input type="number" id="wind_sway_factor" value="${cfg.wind_sway_factor ?? 0.7}" min="0" max="2" step="0.1" style="width:72px" title="How strongly wind bends rain/snow (0 = off, 0.7 = default)">
+            </div>
+            <div class="form-row">
+              <label>Humidity fog weight</label>
+              <input type="number" id="humidity_fog_weight" value="${cfg.humidity_fog_weight ?? 0.35}" min="0" max="1" step="0.05" style="width:72px" title="How strongly humidity contributes to estimated fog intensity (0-1)">
             </div>
             <div class="form-row">
               <label>Rain max tilt (°)</label>
@@ -888,7 +894,7 @@
                   <p><code>moon_phase_entity</code>, <code>uv_index_entity</code>, <code>moon_position_entity</code>, <code>moon_azimuth_entity</code>, <code>moon_altitude_entity</code>, <code>moon_distance_entity</code>: Moon/UV inputs used for moon and sun visual behavior.</p>
                   <p><code>moon_texture_url</code>, <code>moon_normal_url</code>, <code>moon_opacity_max</code>: Advanced moon texture and opacity controls.</p>
                   <p><code>cloud_coverage_entity</code>, <code>humidity_entity</code>, <code>precipitation_entity</code>, <code>wind_speed_entity</code>, <code>wind_direction_entity</code>: Atmosphere, rain, cloud and wind inputs.</p>
-                  <p><code>cloud_speed_multiplier</code>, <code>drizzle_precipitation_max</code>, <code>wind_sway_factor</code>, <code>rain_max_tilt_deg</code>, <code>rain_wind_min_kmh</code>: Rain/cloud motion and wind-response tuning.</p>
+                  <p><code>cloud_speed_multiplier</code>, <code>drizzle_precipitation_max</code>, <code>wind_sway_factor</code>, <code>humidity_fog_weight</code>, <code>rain_max_tilt_deg</code>, <code>rain_wind_min_kmh</code>: Rain/cloud motion and wind-response tuning.</p>
                   <p><code>pm25_entity</code>, <code>pm4_entity</code>, <code>pm10_entity</code>, <code>smog_threshold_pm25</code>, <code>smog_threshold_pm4</code>, <code>smog_threshold_pm10</code>: Smog trigger sensors and thresholds.</p>
                   <p><code>lightning_counter_entity</code>, <code>lightning_distance_entity</code>: Storm strike trigger and distance-aware delay.</p>
                   <p><code>gaming_mode_entity</code>, <code>gaming_matrix_only</code>: Gaming toggle and Matrix-only behavior.</p>
@@ -955,6 +961,7 @@
           k_index_entity: root.getElementById('k_index_entity')?.value || null,
           enable_aurora_effect: !!root.getElementById('enable_aurora_effect')?.checked,
           cloud_speed_multiplier: parseFloat(root.getElementById('cloud_speed_multiplier')?.value || '1') || 1,
+          humidity_fog_weight: Math.max(0, Math.min(1, parseFloat(root.getElementById('humidity_fog_weight')?.value || '0.35') || 0.35)),
           drizzle_precipitation_max: parseFloat(root.getElementById('drizzle_precipitation_max')?.value || '2.5') || 2.5,
           wind_sway_factor: parseFloat(root.getElementById('wind_sway_factor')?.value || '0.7') || 0.7,
           rain_max_tilt_deg: parseFloat(root.getElementById('rain_max_tilt_deg')?.value || '30') || 30,
@@ -1012,7 +1019,7 @@
       };
 
       // Use 'change' for text inputs to avoid cursor jumping (config-changed triggers re-render)
-      const textIds = ['weather_entity', 'sun_entity', 'theme_mode', 'moon_phase_entity', 'uv_index_entity', 'moon_position_entity', 'moon_azimuth_entity', 'moon_altitude_entity', 'moon_distance_entity', 'moon_texture_url', 'moon_normal_url', 'moon_opacity_max', 'gaming_mode_entity', 'pm25_entity', 'pm4_entity', 'pm10_entity', 'smog_threshold_pm25', 'smog_threshold_pm4', 'smog_threshold_pm10', 'cloud_coverage_entity', 'humidity_entity', 'wind_speed_entity', 'wind_direction_entity', 'precipitation_entity', 'lightning_counter_entity', 'lightning_distance_entity', 'aurora_variant', 'aurora_chance_entity', 'aurora_visibility_alert_entity', 'aurora_visibility_min', 'k_index_entity', 'debug_precipitation', 'debug_wind_speed', 'debug_wind_direction', 'debug_lightning_distance', 'debug_lightning_counter', 'debug_cloud_coverage', 'debug_humidity', 'debug_aurora_score', 'cloud_speed_multiplier', 'drizzle_precipitation_max', 'wind_sway_factor', 'rain_max_tilt_deg', 'rain_wind_min_kmh', 'speed_factor_rain', 'speed_factor_snow', 'speed_factor_clouds', 'speed_factor_fog', 'speed_factor_smog', 'speed_factor_hail', 'speed_factor_lightning', 'speed_factor_stars', 'speed_factor_matrix', 'snowy_variant', 'spatial_mode', 'opacity_moon', 'opacity_clouds', 'opacity_aurora', 'opacity_stars', 'opacity_droplets', 'opacity_sun', 'opacity_fog', 'opacity_smog'];
+      const textIds = ['weather_entity', 'sun_entity', 'theme_mode', 'moon_phase_entity', 'uv_index_entity', 'moon_position_entity', 'moon_azimuth_entity', 'moon_altitude_entity', 'moon_distance_entity', 'moon_texture_url', 'moon_normal_url', 'moon_opacity_max', 'gaming_mode_entity', 'pm25_entity', 'pm4_entity', 'pm10_entity', 'smog_threshold_pm25', 'smog_threshold_pm4', 'smog_threshold_pm10', 'cloud_coverage_entity', 'humidity_entity', 'wind_speed_entity', 'wind_direction_entity', 'precipitation_entity', 'lightning_counter_entity', 'lightning_distance_entity', 'aurora_variant', 'aurora_chance_entity', 'aurora_visibility_alert_entity', 'aurora_visibility_min', 'k_index_entity', 'debug_precipitation', 'debug_wind_speed', 'debug_wind_direction', 'debug_lightning_distance', 'debug_lightning_counter', 'debug_cloud_coverage', 'debug_humidity', 'debug_aurora_score', 'cloud_speed_multiplier', 'humidity_fog_weight', 'drizzle_precipitation_max', 'wind_sway_factor', 'rain_max_tilt_deg', 'rain_wind_min_kmh', 'speed_factor_rain', 'speed_factor_snow', 'speed_factor_clouds', 'speed_factor_fog', 'speed_factor_smog', 'speed_factor_hail', 'speed_factor_lightning', 'speed_factor_stars', 'speed_factor_matrix', 'snowy_variant', 'spatial_mode', 'opacity_moon', 'opacity_clouds', 'opacity_aurora', 'opacity_stars', 'opacity_droplets', 'opacity_sun', 'opacity_fog', 'opacity_smog'];
       textIds.forEach(id => {
         const el = root.getElementById(id);
         if (el) el.addEventListener('change', update);
