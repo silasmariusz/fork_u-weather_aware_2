@@ -134,6 +134,20 @@ weather_entity: weather.home
 
 Then use the **UI editor** to fine‑tune options.
 
+Bundled moon textures (default in HACS)
+---------------------------------------
+
+The package now ships with built-in moon textures, enabled by default:
+
+- `moon_texture_url: /hacsfiles/fork_u_weather_aware_2/assets/moon_albedo.jpg`
+- `moon_normal_url: /hacsfiles/fork_u_weather_aware_2/assets/moon_normal.png`
+- `moon_opacity_max: 0.5`
+
+If you install manually from `/local`, switch URLs accordingly, for example:
+
+- `/local/fork_u_weather_aware_2/assets/moon_albedo.jpg`
+- `/local/fork_u_weather_aware_2/assets/moon_normal.png`
+
 Example – Sandbox / Development (UI Editor)
 -------------------------------------------
 
@@ -195,6 +209,7 @@ spatial_mode: gradient-mask  # or background / bubble / foreground
 - Use debug controls for wind direction/speed, lightning distance/counter, and all speed factors.
 - **Lightning / burza:** Wybierz efekt **Lightning** lub **Lightning-rainy** / **Storm**, ustaw **Odległość burzy (km)** i kliknij **+1 wyładowanie** – błysk natychmiast + opóźniony strobe (~2,9 s/km). Działające parametry: `debug_lightning_distance`, `debug_lightning_counter`, przycisk zwiększa licznik i wywołuje błysk.
 - Use scenario presets (`near-storm`, `far-storm`, `blizzard`, `fast-fog`) for quick regression checks.
+- **Parametry zweryfikowane na platformie testowej:** `development_mode`, `test_effect` (w tym Clear night, Lightning, Lightning-rainy, Storm), `debug_precipitation`, `debug_wind_speed`, `debug_wind_direction`, `debug_lightning_distance`, `debug_lightning_counter`, przycisk „+1 wyładowanie”, wszystkie `speed_factor_*`, presety scenariuszy.
 
 Example – Real live weather setup (UI Editor)
 ---------------------------------------------
@@ -215,6 +230,9 @@ moon_position_entity: null
 moon_azimuth_entity: sensor.mycity_moon_azimuth
 moon_altitude_entity: sensor.mycity_moon_altitude
 moon_distance_entity: sensor.mycity_moon_distance
+moon_texture_url: /hacsfiles/fork_u_weather_aware_2/assets/moon_albedo.jpg
+moon_normal_url: /hacsfiles/fork_u_weather_aware_2/assets/moon_normal.png
+moon_opacity_max: 0.5
 
 # Gaming / ambient mode
 gaming_mode_entity: binary_sensor.helper_gaming_mode  # off / on
@@ -270,6 +288,9 @@ These are optional but unlock more advanced behaviour:
 
 - **Sun sensor** (default: `sun.sun`) – used for sun position (left = sunrise, right = sunset) and to hide sun glow when `below_horizon`.
 - **Moon phase entity** (default: `sensor.moon_phase`) – used for moon‑aware effects. Custom components (e.g. Moon Phase, Moon Astro) may add `altitude`, `distance`, `illumination` attributes, which are used for moon glow position and intensity when available.
+- **Moon texture URLs** (default bundled in HACS):  
+  `moon_texture_url: /hacsfiles/fork_u_weather_aware_2/assets/moon_albedo.jpg` and  
+  `moon_normal_url: /hacsfiles/fork_u_weather_aware_2/assets/moon_normal.png` (set `/local/...` paths for manual install).
 - **UV index entity** (default: `sensor.uv_index`) – high UV (6+) gives a deep orange sun glow; normal UV gives a gentle yellow glow. Falls back to weather entity `uv_index` attribute if available.
 - **Moon position entity** (optional) – single sensor with attributes: `azimuth`, `elevation`/`altitude`, `distance`. Use with Moon Astro or similar. If not available, use Lunar Phase sensors below.
 - **Lunar Phase (3 sensors)** – for the Lunar Phase integration: enter **Moon Azimuth**, **Moon Altitude**, and **Moon Distance**.
@@ -313,6 +334,9 @@ uv_index_entity: sensor.uv_index
 moon_azimuth_entity: sensor.moon_azimuth
 moon_altitude_entity: sensor.moon_altitude
 moon_distance_entity: sensor.moon_distance
+moon_texture_url: /hacsfiles/fork_u_weather_aware_2/assets/moon_albedo.jpg
+moon_normal_url: /hacsfiles/fork_u_weather_aware_2/assets/moon_normal.png
+moon_opacity_max: 0.5
 
 # Gaming / Matrix (when ON → cyberpunk overlay)
 gaming_mode_entity: binary_sensor.gaming_mode
