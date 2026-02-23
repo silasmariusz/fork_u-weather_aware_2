@@ -35,6 +35,8 @@
     debug_lightning_counter: null,
     debug_cloud_coverage: null,
     debug_humidity: null,
+    debug_fog_intensity: null,
+    debug_smog_override: null,
     humidity_fog_weight: 0.35,
     cloud_speed_multiplier: 1,
     wind_sway_factor: 0.7,
@@ -336,6 +338,8 @@
       set('debug_lightning_counter', cfg.debug_lightning_counter);
       set('debug_cloud_coverage', cfg.debug_cloud_coverage);
       set('debug_humidity', cfg.debug_humidity);
+      set('debug_fog_intensity', cfg.debug_fog_intensity);
+      set('debug_smog_override', cfg.debug_smog_override);
       set('moon_texture_url', cfg.moon_texture_url);
       set('moon_normal_url', cfg.moon_normal_url);
       set('moon_opacity_max', cfg.moon_opacity_max);
@@ -876,6 +880,13 @@
               <input type="number" id="debug_humidity" value="${cfg.debug_humidity ?? ''}" placeholder="0-100" min="0" max="100" style="width:80px" title="Optional dev override for humidity">
             </div>
             <div class="form-row">
+              <label>Fog intensity (0–1)</label>
+              <input type="number" id="debug_fog_intensity" value="${cfg.debug_fog_intensity ?? ''}" placeholder="Override" min="0" max="1" step="0.1" style="width:80px" title="Dev mode: overrides calculated fog intensity">
+            </div>
+            <div class="form-row">
+              <label><input type="checkbox" id="debug_smog_override" ${cfg.debug_smog_override ? 'checked' : ''}> Smog override (force on)</label>
+            </div>
+            <div class="form-row">
               <label>Aurora visibility score (0–1)</label>
               <input type="number" id="debug_aurora_score" value="${cfg.debug_aurora_score ?? ''}" placeholder="force aurora" min="0" max="1" step="0.1" style="width:80px" title="Force aurora effect in dev mode">
             </div>
@@ -905,7 +916,7 @@
                   <p><code>opacity_moon</code>, <code>opacity_clouds</code>, <code>opacity_aurora</code>, <code>opacity_stars</code>, <code>opacity_droplets</code>, <code>opacity_sun</code>, <code>opacity_fog</code>, <code>opacity_smog</code>: Per-layer opacity in percent.</p>
                   <p><code>speed_factor_rain</code>, <code>speed_factor_snow</code>, <code>speed_factor_clouds</code>, <code>speed_factor_fog</code>, <code>speed_factor_smog</code>, <code>speed_factor_hail</code>, <code>speed_factor_lightning</code>, <code>speed_factor_stars</code>, <code>speed_factor_matrix</code>: Animation speed multipliers (0.1-3).</p>
                   <p><code>mobile_limit_dpr</code>, <code>mobile_reduce_particles</code>, <code>mobile_snowy2_light</code>, <code>mobile_smog_simple</code>, <code>mobile_30fps</code>: Mobile performance switches.</p>
-                  <p><code>development_mode</code>, <code>test_effect</code>, <code>debug_precipitation</code>, <code>debug_wind_speed</code>, <code>debug_wind_direction</code>, <code>debug_lightning_distance</code>, <code>debug_lightning_counter</code>, <code>debug_cloud_coverage</code>, <code>debug_humidity</code>, <code>debug_aurora_score</code>: Development/testing overrides.</p>
+                  <p><code>development_mode</code>, <code>test_effect</code>, <code>debug_precipitation</code>, <code>debug_wind_speed</code>, <code>debug_wind_direction</code>, <code>debug_lightning_distance</code>, <code>debug_lightning_counter</code>, <code>debug_cloud_coverage</code>, <code>debug_humidity</code>, <code>debug_fog_intensity</code>, <code>debug_aurora_score</code>: Development/testing overrides.</p>
                 </div>
               </div>
             </div>
@@ -953,6 +964,8 @@
           debug_lightning_counter: root.getElementById('debug_lightning_counter')?.value || null,
           debug_cloud_coverage: root.getElementById('debug_cloud_coverage')?.value || null,
           debug_humidity: root.getElementById('debug_humidity')?.value || null,
+          debug_fog_intensity: root.getElementById('debug_fog_intensity')?.value || null,
+          debug_smog_override: root.getElementById('debug_smog_override')?.checked ? true : null,
           debug_aurora_score: root.getElementById('debug_aurora_score')?.value || null,
           aurora_variant: root.getElementById('aurora_variant')?.value || 'bands',
           aurora_chance_entity: root.getElementById('aurora_chance_entity')?.value || null,
@@ -1019,13 +1032,13 @@
       };
 
       // Use 'change' for text inputs to avoid cursor jumping (config-changed triggers re-render)
-      const textIds = ['weather_entity', 'sun_entity', 'theme_mode', 'moon_phase_entity', 'uv_index_entity', 'moon_position_entity', 'moon_azimuth_entity', 'moon_altitude_entity', 'moon_distance_entity', 'moon_texture_url', 'moon_normal_url', 'moon_opacity_max', 'gaming_mode_entity', 'pm25_entity', 'pm4_entity', 'pm10_entity', 'smog_threshold_pm25', 'smog_threshold_pm4', 'smog_threshold_pm10', 'cloud_coverage_entity', 'humidity_entity', 'wind_speed_entity', 'wind_direction_entity', 'precipitation_entity', 'lightning_counter_entity', 'lightning_distance_entity', 'aurora_variant', 'aurora_chance_entity', 'aurora_visibility_alert_entity', 'aurora_visibility_min', 'k_index_entity', 'debug_precipitation', 'debug_wind_speed', 'debug_wind_direction', 'debug_lightning_distance', 'debug_lightning_counter', 'debug_cloud_coverage', 'debug_humidity', 'debug_aurora_score', 'cloud_speed_multiplier', 'humidity_fog_weight', 'drizzle_precipitation_max', 'wind_sway_factor', 'rain_max_tilt_deg', 'rain_wind_min_kmh', 'speed_factor_rain', 'speed_factor_snow', 'speed_factor_clouds', 'speed_factor_fog', 'speed_factor_smog', 'speed_factor_hail', 'speed_factor_lightning', 'speed_factor_stars', 'speed_factor_matrix', 'snowy_variant', 'spatial_mode', 'opacity_moon', 'opacity_clouds', 'opacity_aurora', 'opacity_stars', 'opacity_droplets', 'opacity_sun', 'opacity_fog', 'opacity_smog'];
+      const textIds = ['weather_entity', 'sun_entity', 'theme_mode', 'moon_phase_entity', 'uv_index_entity', 'moon_position_entity', 'moon_azimuth_entity', 'moon_altitude_entity', 'moon_distance_entity', 'moon_texture_url', 'moon_normal_url', 'moon_opacity_max', 'gaming_mode_entity', 'pm25_entity', 'pm4_entity', 'pm10_entity', 'smog_threshold_pm25', 'smog_threshold_pm4', 'smog_threshold_pm10', 'cloud_coverage_entity', 'humidity_entity', 'wind_speed_entity', 'wind_direction_entity', 'precipitation_entity', 'lightning_counter_entity', 'lightning_distance_entity', 'aurora_variant', 'aurora_chance_entity', 'aurora_visibility_alert_entity', 'aurora_visibility_min', 'k_index_entity', 'debug_precipitation', 'debug_wind_speed', 'debug_wind_direction', 'debug_lightning_distance', 'debug_lightning_counter', 'debug_cloud_coverage', 'debug_humidity', 'debug_fog_intensity', 'debug_aurora_score', 'cloud_speed_multiplier', 'humidity_fog_weight', 'drizzle_precipitation_max', 'wind_sway_factor', 'rain_max_tilt_deg', 'rain_wind_min_kmh', 'speed_factor_rain', 'speed_factor_snow', 'speed_factor_clouds', 'speed_factor_fog', 'speed_factor_smog', 'speed_factor_hail', 'speed_factor_lightning', 'speed_factor_stars', 'speed_factor_matrix', 'snowy_variant', 'spatial_mode', 'opacity_moon', 'opacity_clouds', 'opacity_aurora', 'opacity_stars', 'opacity_droplets', 'opacity_sun', 'opacity_fog', 'opacity_smog'];
       textIds.forEach(id => {
         const el = root.getElementById(id);
         if (el) el.addEventListener('change', update);
       });
       // Checkboxes fire 'change' on toggle
-      ['enabled', 'development_mode', 'mobile_limit_dpr', 'mobile_reduce_particles', 'mobile_snowy2_light', 'mobile_smog_simple', 'mobile_30fps', 'gaming_matrix_only', 'enable_rain', 'enable_snow', 'enable_clouds', 'enable_fog', 'enable_smog_effect', 'enable_sun_glow', 'enable_moon_glow', 'enable_stars', 'enable_hail', 'enable_lightning_effect', 'enable_matrix', 'enable_window_droplets', 'stars_require_moon', 'enable_aurora_effect'].forEach(id => {
+      ['enabled', 'development_mode', 'debug_smog_override', 'mobile_limit_dpr', 'mobile_reduce_particles', 'mobile_snowy2_light', 'mobile_smog_simple', 'mobile_30fps', 'gaming_matrix_only', 'enable_rain', 'enable_snow', 'enable_clouds', 'enable_fog', 'enable_smog_effect', 'enable_sun_glow', 'enable_moon_glow', 'enable_stars', 'enable_hail', 'enable_lightning_effect', 'enable_matrix', 'enable_window_droplets', 'stars_require_moon', 'enable_aurora_effect'].forEach(id => {
         const el = root.getElementById(id);
         if (el) el.addEventListener('change', update);
       });

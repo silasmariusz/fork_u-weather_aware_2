@@ -108,6 +108,18 @@ const SCENARIOS = {
       debug_wind_direction: 'W',
     },
   },
+  'fog-over-stars': {
+    effect: 'stars',
+    controls: {
+      'debug-fog-intensity': 0.7,
+      'speed-factor-fog': 1.2,
+    },
+    config: {
+      debug_fog_intensity: 0.7,
+      debug_cloud_coverage: null,
+      debug_humidity: null,
+    },
+  },
   'reset-speeds': {
     controls: {
       'speed-factor-rain': 1,
@@ -168,7 +180,8 @@ function applyEffect(testEffect) {
   document.querySelectorAll('#effect-btns .btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.effect === testEffect);
   });
-  forceWeatherUpdate();
+  updateDebugFromControls();
+  requestAnimationFrame(() => forceWeatherUpdate());
 }
 
 function forceWeatherUpdate() {
@@ -195,6 +208,7 @@ function updateDebugFromControls() {
   const lightningCounter = document.getElementById('debug-lightning-counter');
   const cloudCoverage = document.getElementById('debug-cloud-coverage');
   const humidity = document.getElementById('debug-humidity');
+  const fogIntensity = document.getElementById('debug-fog-intensity');
   const humidityFogWeight = document.getElementById('humidity-fog-weight');
   const aurora = document.getElementById('debug-aurora');
   const variant = document.getElementById('aurora-variant');
@@ -221,6 +235,12 @@ function updateDebugFromControls() {
 
   const humidityValue = parseFloat(humidity?.value || '');
   updates.debug_humidity = !isNaN(humidityValue) ? Math.max(0, Math.min(100, humidityValue)) : null;
+
+  const fogIntensityValue = parseFloat(fogIntensity?.value || '');
+  updates.debug_fog_intensity = !isNaN(fogIntensityValue) ? Math.max(0, Math.min(1, fogIntensityValue)) : null;
+
+  const smogOverride = document.getElementById('debug-smog-override');
+  updates.debug_smog_override = smogOverride?.checked ? true : null;
 
   const humidityFogWeightValue = parseFloat(humidityFogWeight?.value || '');
   updates.humidity_fog_weight = !isNaN(humidityFogWeightValue)
@@ -288,6 +308,9 @@ function init() {
   setControlValue('debug-lightning-counter', cfg.debug_lightning_counter ?? '');
   setControlValue('debug-cloud-coverage', cfg.debug_cloud_coverage ?? '');
   setControlValue('debug-humidity', cfg.debug_humidity ?? '');
+  setControlValue('debug-fog-intensity', cfg.debug_fog_intensity ?? '');
+  const smogEl = document.getElementById('debug-smog-override');
+  if (smogEl) smogEl.checked = !!cfg.debug_smog_override;
   setControlValue('humidity-fog-weight', cfg.humidity_fog_weight ?? 0.35);
   setControlValue('debug-aurora', cfg.debug_aurora_score ?? '');
   setControlValue('aurora-variant', cfg.aurora_variant || 'bands');
@@ -309,6 +332,8 @@ function init() {
   document.getElementById('debug-lightning-counter')?.addEventListener('input', refreshOnChange);
   document.getElementById('debug-cloud-coverage')?.addEventListener('input', refreshOnChange);
   document.getElementById('debug-humidity')?.addEventListener('input', refreshOnChange);
+  document.getElementById('debug-fog-intensity')?.addEventListener('input', refreshOnChange);
+  document.getElementById('debug-smog-override')?.addEventListener('change', refreshOnChange);
   document.getElementById('humidity-fog-weight')?.addEventListener('input', refreshOnChange);
   document.getElementById('debug-aurora')?.addEventListener('input', refreshOnChange);
   document.getElementById('aurora-variant')?.addEventListener('change', refreshOnChange);

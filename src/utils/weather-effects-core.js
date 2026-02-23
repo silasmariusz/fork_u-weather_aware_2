@@ -1118,7 +1118,7 @@ function createStarsEffect(ctx) {
       .then(([textureMap, normalMap]) => {
         const moonSize = Math.max(ctx.viewWidth, ctx.viewHeight) * 0.16;
         const geo = new THREE.SphereGeometry(moonSize * 0.5, 32, 24);
-        if (geo.computeTangents) geo.computeTangents();
+        geo.computeTangents();
         const moonVertShader = `
           attribute vec4 tangent;
           uniform vec3 lightDirection;
@@ -1172,7 +1172,11 @@ function createStarsEffect(ctx) {
         group.add(mesh);
         moonTexturedMesh = { mesh, lightDirection: lightDir };
       })
-      .catch(() => {});
+      .catch((err) => {
+        if (typeof console !== 'undefined' && console.warn) {
+          console.warn('[Weather] Moon texture load failed:', err);
+        }
+      });
   }
 
   let twinkleTime = 0;
@@ -1396,7 +1400,7 @@ function createSmogOverlay(core) {
     blending: THREE.NormalBlending,
   });
   const mesh = new THREE.Mesh(geo, mat);
-  mesh.renderOrder = 10;
+  mesh.renderOrder = 100;
   const group = new THREE.Group();
   group.add(mesh);
 
@@ -1705,7 +1709,7 @@ const fogFragShader = `
     float density = mix(primary, detail, 0.35);
     density = smoothstep(uLow, uHigh, density);
     density = pow(density, uContrast);
-    float vMask = 1.0 - smoothstep(0.0, 1.0, vUv.y);
+    float vMask = 4.0 * vUv.y * (1.0 - vUv.y);
     gl_FragColor = vec4(uColor, density * vMask * uOpacity);
   }
 `;
@@ -1735,7 +1739,7 @@ function createFogEffect(ctx) {
   const fogMult = ctx.effectOpacity?.fog ?? 1;
   const intensityMult = Math.max(0, Math.min(1, ctx.fogIntensity ?? 1));
   const stripH = Math.min(FOG_STRIP_HEIGHT, ctx.viewHeight * 0.25);
-  const bottomY = -ctx.viewHeight / 2 + stripH / 2;
+  const centerY = 0;
   const layers = settings.layers.map((lc) => {
     const geo = new THREE.PlaneGeometry(ctx.viewWidth, stripH);
     const uniforms = {
@@ -1758,7 +1762,7 @@ function createFogEffect(ctx) {
       blending: THREE.NormalBlending,
     });
     const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(0, bottomY, 0);
+    mesh.position.set(0, centerY, 0);
     mesh.renderOrder = -3;
     group.add(mesh);
     return { mesh, uniforms, config: lc };
@@ -1782,12 +1786,12 @@ function createFogEffect(ctx) {
       ctx.viewWidth = w;
       ctx.viewHeight = h;
       const newStripH = Math.min(FOG_STRIP_HEIGHT, h * 0.25);
-      const newBottomY = -h / 2 + newStripH / 2;
+      const newCenterY = 0;
       layers.forEach((l) => {
         l.uniforms.uResolution.value.set(w, h);
         l.mesh.geometry.dispose();
         l.mesh.geometry = new THREE.PlaneGeometry(w, newStripH);
-        l.mesh.position.y = newBottomY;
+        l.mesh.position.y = newCenterY;
       });
     },
     dispose() {

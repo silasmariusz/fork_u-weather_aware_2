@@ -135,6 +135,7 @@ function getEffectiveDpr() {
 
 function isSmogAlertActive() {
   const cfg = window.ForkUWeatherAwareConfig || {};
+  if (cfg.development_mode && cfg.debug_smog_override === true) return true;
   const pm25Id = cfg.pm25_entity;
   const pm4Id = cfg.pm4_entity;
   const pm10Id = cfg.pm10_entity;
@@ -589,9 +590,9 @@ function applySpatialStyle() {
   container.style.setProperty('--weather-overlay-z', String(getSpatialZIndex()));
 }
 
-function updateWeather() {
+function updateWeather(force = false) {
   const now = Date.now();
-  if (now - lastUpdateTime < 1000) return;
+  if (!force && now - lastUpdateTime < 1000) return;
 
   const enabled = isOverlayEnabled();
   const onDashboard = isOnEnabledDashboard();
@@ -644,9 +645,13 @@ function updateWeather() {
   const themeMode = getThemeMode();
   const weatherSaysFog = currentWeather === 'fog' || currentWeather === 'foggy';
   const estimatedFogScore = getEstimatedFogScore();
-  const fogIntensity = weatherSaysFog
+  let fogIntensity = weatherSaysFog
     ? 1
     : (estimatedFogScore > 0.25 ? Math.max(0.25, Math.min(0.85, estimatedFogScore)) : 0);
+  if (cfg.development_mode && cfg.debug_fog_intensity != null && String(cfg.debug_fog_intensity).trim() !== '') {
+    const v = parseFloat(cfg.debug_fog_intensity);
+    if (!isNaN(v)) fogIntensity = Math.max(0, Math.min(1, v));
+  }
   const cloudSpeedMult = (cfg.cloud_speed_multiplier != null && !isNaN(parseFloat(cfg.cloud_speed_multiplier)))
     ? Math.max(0.1, Math.min(3, parseFloat(cfg.cloud_speed_multiplier))) : 1;
   const effectOpacity = {
@@ -794,7 +799,7 @@ function init() {
 
   setInterval(updateWeather, 1000);
   window.addEventListener('resize', handleResize);
-  window.addEventListener('fork-u-weather-force-update', () => { lastUpdateTime = 0; updateWeather(); });
+  window.addEventListener('fork-u-weather-force-update', () => { lastUpdateTime = 0; updateWeather(true); });
 
   setInterval(() => {
     if (window.location.pathname !== lastPath) {

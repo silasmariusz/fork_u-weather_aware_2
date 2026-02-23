@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <!-- Run: npm run serve (don't open index.html directly - CORS blocks ES modules from file://) -->
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌦️</text></svg>">
   <title>Fork U – Weather Effects Test</title>
@@ -98,6 +99,14 @@
           <input type="number" id="humidity-fog-weight" min="0" max="1" step="0.05" value="0.35" style="width:90px">
         </div>
         <div class="control">
+          <label>Fog intensity (0–1)</label>
+          <input type="number" id="debug-fog-intensity" min="0" max="1" step="0.1" value="" placeholder="Override" style="width:90px" title="Dev mode: nadpisuje obliczoną intensywność mgły">
+        </div>
+        <div class="control">
+          <label>Smog override</label>
+          <input type="checkbox" id="debug-smog-override" title="Dev mode: włącz smog (bez PM2.5)">
+        </div>
+        <div class="control">
           <label>Aurora variant</label>
           <select id="aurora-variant">
             <option value="bands" selected>Bands</option>
@@ -146,6 +155,7 @@
         <button class="btn scenario-btn" data-scenario="fast-fog">Fast fog</button>
         <button class="btn scenario-btn" data-scenario="humid-fog">Humid fog</button>
         <button class="btn scenario-btn" data-scenario="dry-air">Dry air</button>
+        <button class="btn scenario-btn" data-scenario="fog-over-stars">Fog over stars</button>
         <button class="btn scenario-btn" data-scenario="reset-speeds">Reset speeds</button>
       </div>
     </div>
@@ -171,7 +181,11 @@
         debug_lightning_counter: 0,
         debug_cloud_coverage: null,
         debug_humidity: null,
+        debug_fog_intensity: null,
+        debug_smog_override: null,
         humidity_fog_weight: 0.35,
+        moon_texture_url: '/assets/moon_albedo.jpg',
+        moon_normal_url: '/assets/moon_normal.png',
         debug_aurora_score: 1,
         aurora_variant: 'bands',
         speed_factor_rain: 1,
@@ -187,6 +201,6 @@
       window.ForkUWeatherAwareConfig = Object.assign({}, window.ForkUWeatherAwareConfig || {}, devCfg);
     })();
   </script>
-  <script type="module" src="/src/test-entry.js"></script>
+  <script type="module" src="./src/test-entry.js"></script>
 </body>
 </html>

@@ -34,6 +34,8 @@ const DEFAULT_OVERLAY_CONFIG = {
   debug_lightning_counter: null,
   debug_cloud_coverage: null,
   debug_humidity: null,
+  debug_fog_intensity: null,
+  debug_smog_override: null,
   humidity_fog_weight: 0.35,
   cloud_speed_multiplier: 1,
   rain_max_tilt_deg: 30,
