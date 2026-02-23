@@ -88,23 +88,6 @@ const fogVertexShader = `
   }
 `;
 
-function getSafeSpeedFactor(rawValue, fallback = 1) {
-  const parsed = typeof rawValue === 'number' ? rawValue : parseFloat(rawValue);
-  if (!isFinite(parsed)) return fallback;
-  return THREE.MathUtils.clamp(parsed, 0.1, 3);
-}
-
-function getWindFallRateMultiplier(extras, fallbackWindSpeed = 5, fallbackWindMin = 3) {
-  const windSpeed = (typeof extras?.windSpeedKmh === 'number')
-    ? extras.windSpeedKmh
-    : fallbackWindSpeed;
-  const windMin = (typeof extras?.rainWindMinKmh === 'number')
-    ? extras.rainWindMinKmh
-    : fallbackWindMin;
-  if (!isFinite(windSpeed) || !isFinite(windMin) || windSpeed <= windMin) return 1;
-  return THREE.MathUtils.clamp(1 + ((windSpeed - windMin) / 45), 1, 2);
-}
-
 export class WeatherEffectsCore {
   constructor(options) {
     this.canvas = options.canvas;
@@ -128,10 +111,8 @@ export class WeatherEffectsCore {
     this.smogOverlay = null;
     this.windowDropletsOverlay = null;
     this.lightningOverlay = null;
-    this.fogOverlay = null;
     this.auroraOverlay = null;
     this.renderTarget = null;
-    this.dropletsBackgroundTarget = null;
     this.maskScene = null;
     this.maskCamera = null;
     this.maskQuad = null;
@@ -160,7 +141,6 @@ export class WeatherEffectsCore {
       depth: false,
       preserveDrawingBuffer: false,
     });
-    r.setClearColor(0x000000, 0);
     r.setPixelRatio(Math.min(this.devicePixelRatio || 1, this.isMobile ? 1 : 1.5));
     r.setSize(this.viewportWidth, this.viewportHeight, false);
     return r;
@@ -187,7 +167,6 @@ export class WeatherEffectsCore {
       this.lastAppliedExtras.auroraOverlay !== this.effectExtras.auroraOverlay ||
       this.lastAppliedExtras.auroraVisibilityScore !== this.effectExtras.auroraVisibilityScore ||
       this.lastAppliedExtras.auroraVariant !== this.effectExtras.auroraVariant ||
-      this.lastAppliedExtras.fogIntensity !== this.effectExtras.fogIntensity ||
       JSON.stringify(this.lastAppliedExtras.effectOpacity || {}) !== JSON.stringify(this.effectExtras.effectOpacity || {}) ||
       moonChanged ||
       windChanged;
@@ -196,7 +175,6 @@ export class WeatherEffectsCore {
       this.updateSmogOverlay();
       this.updateWindowDropletsOverlay();
       this.updateLightningOverlay();
-      this.updateFogOverlay();
       this.updateAuroraOverlay();
       this.startLoop();
       return;
@@ -208,7 +186,6 @@ export class WeatherEffectsCore {
     this.disposeSmogOverlay();
     this.disposeWindowDropletsOverlay();
     this.disposeLightningOverlay();
-    this.disposeFogOverlay();
     this.disposeAuroraOverlay();
     this.disposeActiveEffect();
     this.currentEffect = 'none';
@@ -278,27 +255,6 @@ export class WeatherEffectsCore {
     this.lightningOverlay = null;
   }
 
-  updateFogOverlay() {
-    const effectIsFog = this.currentEffect === 'fog_light' || this.currentEffect === 'fog_dense';
-    const intensity = this.effectExtras.fogIntensity ?? 0;
-    const active = !effectIsFog && intensity > 0;
-    if (active && !this.fogOverlay) {
-      this.fogOverlay = createFogOverlay(this);
-      this.scene.add(this.fogOverlay.group);
-    } else if (!active && this.fogOverlay) {
-      this.disposeFogOverlay();
-    } else if (this.fogOverlay) {
-      this.fogOverlay.setOpacity(this.opacity);
-    }
-  }
-
-  disposeFogOverlay() {
-    if (!this.fogOverlay) return;
-    this.scene.remove(this.fogOverlay.group);
-    this.fogOverlay.dispose();
-    this.fogOverlay = null;
-  }
-
   updateAuroraOverlay() {
     const active = this.currentEffect === 'stars' && Boolean(this.effectExtras.auroraOverlay);
     const visibilityScore = Math.max(0, Math.min(1, this.effectExtras.auroraVisibilityScore ?? 0));
@@ -343,9 +299,6 @@ export class WeatherEffectsCore {
     if (this.renderTarget) {
       this.renderTarget.setSize(this.viewportWidth, this.viewportHeight);
     }
-    if (this.dropletsBackgroundTarget) {
-      this.dropletsBackgroundTarget.setSize(this.viewportWidth, this.viewportHeight);
-    }
     this.devicePixelRatio = options.devicePixelRatio ?? 1;
     this.isMobile = options.isMobile ?? false;
     this.viewWidth = this.computeViewWidth(WEATHER_EFFECTS_VIEW_HEIGHT);
@@ -363,7 +316,6 @@ export class WeatherEffectsCore {
     this.smogOverlay?.onResize?.(this.viewWidth, this.viewHeight, this.isMobile, this.viewportWidth, this.viewportHeight);
     this.windowDropletsOverlay?.onResize?.(this.viewWidth, this.viewHeight, this.isMobile, this.viewportWidth, this.viewportHeight);
     this.lightningOverlay?.onResize?.(this.viewWidth, this.viewHeight, this.isMobile, this.viewportWidth, this.viewportHeight);
-    this.fogOverlay?.onResize?.(this.viewWidth, this.viewHeight, this.isMobile, this.viewportWidth, this.viewportHeight);
     this.auroraOverlay?.onResize?.(this.viewWidth, this.viewHeight, this.isMobile, this.viewportWidth, this.viewportHeight);
   }
 
@@ -372,10 +324,6 @@ export class WeatherEffectsCore {
     if (this.renderTarget) {
       this.renderTarget.dispose();
       this.renderTarget = null;
-    }
-    if (this.dropletsBackgroundTarget) {
-      this.dropletsBackgroundTarget.dispose();
-      this.dropletsBackgroundTarget = null;
     }
     if (this.maskQuad?.material) {
       this.maskQuad.material.dispose();
@@ -403,20 +351,10 @@ export class WeatherEffectsCore {
     const delta = Math.min((timestamp - this.lastTimestamp) / 1000, 0.05);
     this.lastTimestamp = timestamp;
     this.activeEffect?.update(delta, timestamp / 1000, this.effectExtras);
-    this.smogOverlay?.update(delta, this.effectExtras);
+    this.smogOverlay?.update(delta);
     this.windowDropletsOverlay?.update(delta);
     this.lightningOverlay?.update(delta, timestamp / 1000, this.effectExtras);
-    this.fogOverlay?.update(delta, timestamp / 1000, this.effectExtras);
     this.auroraOverlay?.update(delta);
-
-    if (this.windowDropletsOverlay?.setBackgroundTexture) {
-      this.ensureDropletsBackgroundPass();
-      this.windowDropletsOverlay.setVisible(false);
-      this.renderer.setRenderTarget(this.dropletsBackgroundTarget);
-      this.renderer.render(this.scene, this.camera);
-      this.windowDropletsOverlay.setVisible(true);
-      this.windowDropletsOverlay.setBackgroundTexture(this.dropletsBackgroundTarget.texture);
-    }
 
     const useGradientMask = this.effectExtras.spatialMode === 'gradient-mask';
     if (useGradientMask) {
@@ -430,17 +368,6 @@ export class WeatherEffectsCore {
       this.renderer.render(this.maskScene, this.maskCamera);
     }
     this.animationFrame = requestFrame(this.renderLoop);
-  }
-
-  ensureDropletsBackgroundPass() {
-    if (this.dropletsBackgroundTarget) return;
-    this.dropletsBackgroundTarget = new THREE.WebGLRenderTarget(this.viewportWidth, this.viewportHeight, {
-      minFilter: THREE.LinearFilter,
-      magFilter: THREE.LinearFilter,
-      format: THREE.RGBAFormat,
-      type: THREE.UnsignedByteType,
-      stencilBuffer: false,
-    });
   }
 
   ensureGradientMaskPass() {
@@ -505,7 +432,6 @@ export class WeatherEffectsCore {
     this.updateSmogOverlay();
     this.updateWindowDropletsOverlay();
     this.updateLightningOverlay();
-    this.updateFogOverlay();
     this.updateAuroraOverlay();
     this.startLoop();
   }
@@ -541,10 +467,6 @@ export class WeatherEffectsCore {
       themeMode: this.effectExtras.themeMode ?? 'dark',
       cloudSpeedMultiplier: this.effectExtras.cloudSpeedMultiplier ?? 1,
       effectOpacity: this.effectExtras.effectOpacity || {},
-      fogIntensity: effect.startsWith('fog') ? (this.effectExtras.fogIntensity ?? 1) : 0,
-      moonTextureUrl: this.effectExtras.moonTextureUrl ?? null,
-      moonNormalUrl: this.effectExtras.moonNormalUrl ?? null,
-      moonOpacityMax: Math.max(0.1, Math.min(0.5, this.effectExtras.moonOpacityMax ?? 0.5)),
     };
     if (effect === 'lightning') return createLightningEffect(ctx);
     if (effect === 'sun_beams') return createSunBeamEffect(ctx);
@@ -614,16 +536,12 @@ function createRainEffect(ctx) {
     windSway = -Math.sin(bearingRad) * windSpeed * 0.06 * swayFactor;
   }
   const windSwayNorm = windSway * 0.15;
-  const windTilt = windSpeed >= windMin ? Math.min(1, (windSpeed - windMin) / 35) * 0.45 : 0;
-  const windFromRad = ((ctx.windBearing ?? 270) * Math.PI) / 180;
 
   const uniforms = {
     uTime: { value: 0 },
     uOpacity: { value: ctx.opacity / 100 },
     uViewSize: { value: new THREE.Vector2(ctx.viewWidth, ctx.viewHeight) },
     uWindSway: { value: windSwayNorm },
-    uWindTilt: { value: windTilt },
-    uWindBearingRad: { value: windFromRad },
   };
 
   const rainMaterial = new THREE.ShaderMaterial({
@@ -637,16 +555,13 @@ function createRainEffect(ctx) {
       uniform float uTime;
       uniform vec2 uViewSize;
       uniform float uWindSway;
-      uniform float uWindTilt;
-      uniform float uWindBearingRad;
       varying float vAlpha;
       void main() {
         float progress = fract(uTime * instanceSpeed + instancePhase);
         float travel = (uViewSize.y * 0.5) - progress * (uViewSize.y + 20.0);
         vec3 transformed = position;
         transformed.y *= instanceLength;
-        float leanX = -uWindTilt * transformed.y * sin(uWindBearingRad);
-        transformed.x += instanceOffset.x + leanX + sin(progress * 6.28318 + instancePhase) * instanceSway + uWindSway * progress * uViewSize.y;
+        transformed.x += instanceOffset.x + sin(progress * 6.28318 + instancePhase) * instanceSway + uWindSway * progress * uViewSize.y;
         transformed.y += travel + instanceOffset.y;
         transformed.z += -5.0 + instanceOffset.z;
         vAlpha = 1.0 - progress;
@@ -673,22 +588,7 @@ function createRainEffect(ctx) {
     group,
     update(delta, _time, extras) {
       const precipMult = extras?.precipitationMultiplier ?? 1;
-      const speedFactorRain = getSafeSpeedFactor(extras?.speed_factor_rain, 1);
-      const windFallMult = getWindFallRateMultiplier(extras, windSpeed, windMin);
-      const liveWindSpeed = (typeof extras?.windSpeedKmh === 'number') ? extras.windSpeedKmh : windSpeed;
-      const liveBearing = (typeof extras?.windBearing === 'number') ? extras.windBearing : (ctx.windBearing ?? 270);
-      let liveWindSway = 0;
-      let liveWindTilt = 0;
-      const liveFromRad = (liveBearing * Math.PI) / 180;
-      if (liveWindSpeed >= windMin) {
-        const liveBearingRad = (liveBearing * Math.PI) / 180;
-        liveWindSway = -Math.sin(liveBearingRad) * liveWindSpeed * 0.06 * swayFactor;
-        liveWindTilt = Math.min(1, (liveWindSpeed - windMin) / 35) * 0.45;
-      }
-      uniforms.uWindSway.value = liveWindSway * 0.15;
-      uniforms.uWindTilt.value = liveWindTilt;
-      uniforms.uWindBearingRad.value = liveFromRad;
-      uniforms.uTime.value += delta * preset.timeScale * precipMult * speedFactorRain * windFallMult;
+      uniforms.uTime.value += delta * preset.timeScale * precipMult;
       uniforms.uViewSize.value.set(ctx.viewWidth, ctx.viewHeight);
     },
     setOpacity(v) {
@@ -759,15 +659,12 @@ function createSnowEffect(ctx) {
 
   return {
     group,
-    update(delta, _time, extras) {
-      const speedFactorSnow = getSafeSpeedFactor(extras?.speed_factor_snow, 1);
-      const windFallMult = getWindFallRateMultiplier(extras, windSpeed, windMin);
-      const motionScale = delta * 25 * speedFactorSnow;
+    update(delta) {
       const verts = geo.attributes.position.array;
       for (let i = 0; i < verts.length; i += 3) {
-        verts[i] += velocities[i] * motionScale;
-        verts[i + 1] += velocities[i + 1] * motionScale * windFallMult;
-        verts[i + 2] += velocities[i + 2] * delta * 10 * speedFactorSnow;
+        verts[i] += velocities[i] * delta * 25;
+        verts[i + 1] += velocities[i + 1] * delta * 25;
+        verts[i + 2] += velocities[i + 2] * delta * 10;
         const halfW = ctx.viewWidth / 2 + 15;
         const halfH = ctx.viewHeight / 2 + 15;
         if (verts[i + 1] < -halfH) {
@@ -858,18 +755,16 @@ function createSnowy2Effect(ctx) {
 
   return {
     group,
-    update(delta, _time, extras) {
-      const speedFactorSnow = getSafeSpeedFactor(extras?.speed_factor_snow, 1);
-      const windFallMult = getWindFallRateMultiplier(extras, windSpeed, windMin);
+    update(delta) {
       layerData.forEach((ld) => {
         const verts = ld.geo.attributes.position.array;
-        const d = delta * 60 * speedFactorSnow;
+        const d = delta * 60;
         for (let i = 0; i < verts.length / 3; i++) {
           const i3 = i * 3;
           ld.swayOffsets[i] += ld.swaySpeeds[i];
           const swayX = Math.sin(ld.swayOffsets[i]) * ld.swayAmps[i] * 0.08;
           verts[i3] += (swayX + windBiasX) * d;
-          verts[i3 + 1] -= ld.fallSpeeds[i] * d * windFallMult;
+          verts[i3 + 1] -= ld.fallSpeeds[i] * d;
           const halfW = ctx.viewWidth / 2 + 15;
           const halfH = ctx.viewHeight / 2 + 15;
           if (verts[i3 + 1] < -halfH) {
@@ -931,12 +826,11 @@ function createMatrixEffect(ctx) {
 
   return {
     group,
-    update(delta, _time, extras) {
-      const speedFactorMatrix = getSafeSpeedFactor(extras?.speed_factor_matrix, 1);
+    update(delta) {
       const W = matrixCanvas.width;
       const H = matrixCanvas.height;
       const scale = W / ctx.viewportWidth;
-      spawnTimer += delta * 1000 * speedFactorMatrix;
+      spawnTimer += delta * 1000;
 
       const oneThirdY = H / 3;
       const anyPastThird = streams.some((s) => s.y > oneThirdY);
@@ -976,7 +870,7 @@ function createMatrixEffect(ctx) {
 
       for (let i = streams.length - 1; i >= 0; i--) {
         const s = streams[i];
-        s.y += s.speed * speedFactorMatrix;
+        s.y += s.speed;
         if (s.y > H + 150) {
           streams.splice(i, 1);
           continue;
@@ -1024,10 +918,48 @@ function createStarsEffect(ctx) {
   const positions = new Float32Array(count * 3);
   const moonPos = ctx.moonPosition;
 
+  // Subtle violet top gradient for clean clear-night sky.
+  const nightGlowGeo = new THREE.PlaneGeometry(ctx.viewWidth, ctx.viewHeight);
+  const nightGlowMat = new THREE.ShaderMaterial({
+    uniforms: {
+      uOpacity: { value: 0.16 * (ctx.opacity / 100) },
+    },
+    vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: `
+      varying vec2 vUv;
+      uniform float uOpacity;
+      void main() {
+        float top = smoothstep(0.28, 0.98, vUv.y);
+        float centerSoft = 1.0 - smoothstep(0.0, 0.55, abs(vUv.x - 0.5));
+        float alpha = top * (0.55 + centerSoft * 0.45) * uOpacity;
+        vec3 col = vec3(0.34, 0.30, 0.52);
+        gl_FragColor = vec4(col, alpha);
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.NormalBlending,
+  });
+  const nightGlowMesh = new THREE.Mesh(nightGlowGeo, nightGlowMat);
+  nightGlowMesh.position.set(0, 0, -2.2);
+  nightGlowMesh.renderOrder = -1;
+  group.add(nightGlowMesh);
+
   for (let i = 0; i < count; i++) {
     const i3 = i * 3;
-    positions[i3] = THREE.MathUtils.randFloatSpread(ctx.viewWidth + 20);
-    positions[i3 + 1] = THREE.MathUtils.randFloatSpread(ctx.viewHeight + 20);
+    // Keep stars mostly near edges so center stays subtle.
+    let x = 0;
+    let y = 0;
+    for (let t = 0; t < 8; t++) {
+      x = THREE.MathUtils.randFloatSpread(ctx.viewWidth + 20);
+      y = THREE.MathUtils.randFloatSpread(ctx.viewHeight + 20);
+      const nx = Math.abs(x) / Math.max(1, (ctx.viewWidth + 20) * 0.5);
+      const ny = Math.abs(y) / Math.max(1, (ctx.viewHeight + 20) * 0.5);
+      const edge = Math.max(nx, ny);
+      if (edge > 0.55 || Math.random() < 0.18) break;
+    }
+    positions[i3] = x;
+    positions[i3 + 1] = y;
     positions[i3 + 2] = Math.random() * 2 - 1;
   }
 
@@ -1037,9 +969,9 @@ function createStarsEffect(ctx) {
   const mat = new THREE.PointsMaterial({
     map: tex,
     transparent: true,
-    opacity: 0.85 * (ctx.opacity / 100) * starsMult,
+    opacity: 0.92 * (ctx.opacity / 100) * starsMult,
     sizeAttenuation: false,
-    size: 2,
+    size: 2.2,
     color: 0xe8f4ff,
     depthWrite: false,
     depthTest: false,
@@ -1051,9 +983,7 @@ function createStarsEffect(ctx) {
   group.add(points);
 
   let moonMesh = null;
-  let moonTexturedMesh = null;
-  const moonOpacityMax = Math.max(0.1, Math.min(0.5, ctx.moonOpacityMax ?? 0.5));
-
+  let moonEdgeGlowMesh = null;
   if (moonPos && typeof moonPos.x === 'number' && typeof moonPos.y === 'number') {
     const mx = (moonPos.x - 0.5) * ctx.viewWidth;
     const my = (0.5 - moonPos.y) * ctx.viewHeight;
@@ -1061,7 +991,7 @@ function createStarsEffect(ctx) {
     const moonGeo = new THREE.PlaneGeometry(moonSize, moonSize);
     const moonMat = new THREE.ShaderMaterial({
       uniforms: {
-        uOpacity: { value: 0.35 * (ctx.opacity / 100) * moonMult },
+        uOpacity: { value: 0.18 * (ctx.opacity / 100) * moonMult },
       },
       vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
       fragmentShader: `
@@ -1070,7 +1000,10 @@ function createStarsEffect(ctx) {
         void main() {
           vec2 c = vUv - 0.5;
           float d = length(c) * 2.0;
-          float alpha = (1.0 - smoothstep(0.0, 1.0, d)) * uOpacity * 0.9;
+          if (d > 1.0) discard;
+          float core = smoothstep(0.34, 0.0, d);
+          float halo = smoothstep(1.0, 0.12, d);
+          float alpha = (core * 0.78 + halo * 0.22) * uOpacity;
           gl_FragColor = vec4(0.96, 0.97, 1.0, alpha);
         }
       `,
@@ -1082,267 +1015,244 @@ function createStarsEffect(ctx) {
     moonMesh.position.set(mx, my, -1);
     moonMesh.renderOrder = 1;
     group.add(moonMesh);
-  }
 
-  if (
-    ctx.moonTextureUrl &&
-    ctx.moonNormalUrl &&
-    moonPos &&
-    typeof moonPos.x === 'number' &&
-    typeof moonPos.y === 'number'
-  ) {
-    const loadMoonTexture = (url) => {
-      if (typeof window !== 'undefined' && window.document && typeof THREE.TextureLoader !== 'undefined') {
-        return new Promise((resolve, reject) => {
-          new THREE.TextureLoader().load(url, resolve, undefined, reject);
-        });
-      }
-      return fetch(url)
-        .then((r) => r.blob())
-        .then((blob) => (typeof createImageBitmap === 'function' ? createImageBitmap(blob) : Promise.reject(new Error('no createImageBitmap'))))
-        .then((bitmap) => {
-          const w = bitmap.width;
-          const h = bitmap.height;
-          const canvas = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : null;
-          if (!canvas) return Promise.reject(new Error('no OffscreenCanvas'));
-          const ctx2d = canvas.getContext('2d');
-          ctx2d.drawImage(bitmap, 0, 0);
-          const imageData = ctx2d.getImageData(0, 0, w, h);
-          const tex = new THREE.DataTexture(imageData.data, w, h);
-          tex.format = THREE.RGBAFormat;
-          tex.needsUpdate = true;
-          return tex;
-        });
-    };
-    Promise.all([loadMoonTexture(ctx.moonTextureUrl), loadMoonTexture(ctx.moonNormalUrl)])
-      .then(([textureMap, normalMap]) => {
-        const moonSize = Math.max(ctx.viewWidth, ctx.viewHeight) * 0.16;
-        const geo = new THREE.SphereGeometry(moonSize * 0.5, 32, 24);
-        geo.computeTangents();
-        const moonVertShader = `
-          attribute vec4 tangent;
-          uniform vec3 lightDirection;
-          varying vec2 vUv;
-          varying vec3 vLightDir;
-          varying mat3 tbn;
-          void main() {
-            vUv = uv;
-            vec3 n = normalize(normalMatrix * normal);
-            vec3 t = normalize(normalMatrix * tangent.xyz);
-            vec3 b = normalize(cross(n, t) * tangent.w);
-            tbn = mat3(t, b, n);
-            vLightDir = (inverse(normalMatrix) * vec4(lightDirection, 0.0)).xyz;
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-          }
-        `;
-        const moonFragShader = `
-          uniform sampler2D textureMap;
-          uniform sampler2D normalMap;
-          uniform float uOpacity;
-          varying vec2 vUv;
-          varying vec3 vLightDir;
-          varying mat3 tbn;
-          void main() {
-            vec3 n = texture2D(normalMap, vUv).xyz * 2.0 - 1.0;
-            n = normalize(tbn * n);
-            float intensity = max(0.07, dot(n, normalize(vLightDir)));
-            vec4 tex = texture2D(textureMap, vUv);
-            gl_FragColor = vec4(tex.rgb * intensity, tex.a * uOpacity);
-          }
-        `;
-        const lightDir = new THREE.Vector3(0.4, 0.2, 0.9).normalize();
-        const mat = new THREE.ShaderMaterial({
-          uniforms: {
-            textureMap: { value: textureMap },
-            normalMap: { value: normalMap },
-            uOpacity: { value: moonOpacityMax * (ctx.opacity / 100) * moonMult },
-            lightDirection: { value: lightDir },
-          },
-          vertexShader: moonVertShader,
-          fragmentShader: moonFragShader,
-          transparent: true,
-          depthWrite: false,
-          blending: THREE.NormalBlending,
-        });
-        const mesh = new THREE.Mesh(geo, mat);
-        const mx = (moonPos.x - 0.5) * ctx.viewWidth;
-        const my = (0.5 - moonPos.y) * ctx.viewHeight;
-        mesh.position.set(mx, my, -2);
-        mesh.renderOrder = 3;
-        group.add(mesh);
-        moonTexturedMesh = { mesh, lightDirection: lightDir };
-      })
-      .catch((err) => {
-        if (typeof console !== 'undefined' && console.warn) {
-          console.warn('[Weather] Moon texture load failed:', err);
+    const edgeGeo = new THREE.PlaneGeometry(ctx.viewWidth, ctx.viewHeight);
+    const edgeCenter = { x: moonPos.x, y: moonPos.y };
+    if (edgeCenter.y <= edgeCenter.x && edgeCenter.y <= (1 - edgeCenter.x)) {
+      edgeCenter.y = -0.16;
+    } else if (edgeCenter.x < 0.5) {
+      edgeCenter.x = -0.15;
+    } else {
+      edgeCenter.x = 1.15;
+    }
+    const edgeMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uOpacity: { value: 0.1 * (ctx.opacity / 100) * moonMult },
+        uCenter: { value: new THREE.Vector2(edgeCenter.x, edgeCenter.y) },
+      },
+      vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+      fragmentShader: `
+        varying vec2 vUv;
+        uniform float uOpacity;
+        uniform vec2 uCenter;
+        void main() {
+          float d = length(vUv - uCenter);
+          float glow = smoothstep(0.9, 0.05, d);
+          float alpha = glow * glow * uOpacity;
+          gl_FragColor = vec4(0.82, 0.86, 0.96, alpha);
         }
-      });
+      `,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    moonEdgeGlowMesh = new THREE.Mesh(edgeGeo, edgeMat);
+    moonEdgeGlowMesh.position.set(0, 0, -1.8);
+    moonEdgeGlowMesh.renderOrder = 0;
+    group.add(moonEdgeGlowMesh);
   }
 
   let twinkleTime = 0;
 
   return {
     group,
-    update(delta, _time, extras) {
-      const speedFactorStars = getSafeSpeedFactor(extras?.speed_factor_stars, 1);
-      twinkleTime += delta * 1.2 * speedFactorStars;
-      mat.opacity = 0.85 * (ctx.opacity / 100) * starsMult * (0.8 + 0.2 * Math.sin(twinkleTime));
-      const mp = extras?.moonPosition;
-      if (moonMesh && mp && typeof mp.x === 'number' && typeof mp.y === 'number') {
-        moonMesh.position.x = (mp.x - 0.5) * ctx.viewWidth;
-        moonMesh.position.y = (0.5 - mp.y) * ctx.viewHeight;
-      }
-      if (moonTexturedMesh && mp && typeof mp.x === 'number' && typeof mp.y === 'number') {
-        moonTexturedMesh.mesh.position.x = (mp.x - 0.5) * ctx.viewWidth;
-        moonTexturedMesh.mesh.position.y = (0.5 - mp.y) * ctx.viewHeight;
-        const sun = extras?.sunPosition;
-        if (sun && typeof sun.x === 'number') {
-          moonTexturedMesh.lightDirection.set(sun.x - mp.x, (sun.y ?? 0.2) - mp.y, 0.8).normalize();
-          moonTexturedMesh.mesh.material.uniforms.lightDirection.value.copy(moonTexturedMesh.lightDirection);
-        }
-      }
+    update(delta) {
+      twinkleTime += delta * 1.2;
+      mat.opacity = 0.92 * (ctx.opacity / 100) * starsMult * (0.82 + 0.18 * Math.sin(twinkleTime));
     },
     setOpacity(v) {
       const n = Math.max(0, Math.min(1, v / 100));
-      mat.opacity = 0.85 * n * starsMult;
-      if (moonMesh) moonMesh.material.uniforms.uOpacity.value = 0.35 * n * moonMult;
-      if (moonTexturedMesh) moonTexturedMesh.mesh.material.uniforms.uOpacity.value = moonOpacityMax * n * moonMult;
+      mat.opacity = 0.92 * n * starsMult;
+      if (moonMesh) moonMesh.material.uniforms.uOpacity.value = 0.18 * n * moonMult;
+      if (moonEdgeGlowMesh) moonEdgeGlowMesh.material.uniforms.uOpacity.value = 0.1 * n * moonMult;
+      nightGlowMat.uniforms.uOpacity.value = 0.16 * n;
     },
     onResize(w, h) {
       ctx.viewWidth = w;
       ctx.viewHeight = h;
+      nightGlowMesh.geometry.dispose();
+      nightGlowMesh.geometry = new THREE.PlaneGeometry(w, h);
     },
     dispose() {
       geo.dispose();
       mat.dispose();
       tex.dispose();
+      nightGlowMesh.geometry.dispose();
+      nightGlowMat.dispose();
       if (moonMesh) {
         moonMesh.geometry.dispose();
         moonMesh.material.dispose();
       }
-      if (moonTexturedMesh) {
-        moonTexturedMesh.mesh.geometry.dispose();
-        moonTexturedMesh.mesh.material.dispose();
+      if (moonEdgeGlowMesh) {
+        moonEdgeGlowMesh.geometry.dispose();
+        moonEdgeGlowMesh.material.dispose();
       }
     },
   };
 }
 
+const MIN_DROPLET_DIST = 55;
+
 function createWindowDropletsOverlay(core) {
-  let viewW = core.viewWidth;
-  let viewH = core.viewHeight;
-  let viewportW = core.viewportWidth;
-  let viewportH = core.viewportHeight;
-  let geo = new THREE.PlaneGeometry(viewW, viewH);
-  const uniforms = {
-    uTime: { value: 0 },
-    uOpacity: { value: 0.9 * (core.opacity / 100) },
-    uRainAmount: { value: 0.75 },
-    uBackground: { value: null },
-    uViewSize: { value: new THREE.Vector2(viewW, viewH) },
-    uViewportSize: { value: new THREE.Vector2(viewportW, viewportH) },
-  };
-  const mat = new THREE.ShaderMaterial({
-    uniforms,
-    vertexShader: fogVertexShader,
-    fragmentShader: `
-      varying vec2 vUv;
-      uniform float uTime;
-      uniform float uOpacity;
-      uniform float uRainAmount;
-      uniform sampler2D uBackground;
-      uniform vec2 uViewportSize;
+  const viewW = core.viewWidth;
+  const viewH = core.viewHeight;
+  const { canvas: dropCanvas, ctx: dropCtx } = createDrawingSurface(
+    Math.max(256, Math.floor(core.viewportWidth / 2)),
+    Math.max(256, Math.floor(core.viewportHeight / 2))
+  );
+  const texture = createCanvasTexture(dropCanvas);
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
 
-      float random11(float x, float seed) {
-        return fract(sin(x * 345.456 + seed * 0.37) * 9831.517);
-      }
-      float random21(vec2 p, float seed) {
-        return fract(sin(dot(p, vec2(123.456, 43.12)) + seed * 0.13) * 15731.743);
-      }
-
-      vec3 dropsLayer(vec2 uv, float seed, float timeScale, float cellRes, float radius, float amp) {
-        float t = uTime * timeScale;
-        uv.y += random11(0.5, seed) + t;
-        uv *= cellRes;
-        float row = floor(uv.y);
-        uv.x += random11(row, seed + 6.17) * 1.7;
-        vec2 cell = floor(uv);
-        vec2 cellUv = fract(uv) - 0.5;
-        float shown = step(0.72, random21(cell, seed + 91.7));
-        float pulse = 1.0 - abs(fract(uTime * 0.11 + random21(cell, seed + 17.3) * 2.0) * 2.0 - 1.0);
-        pulse = clamp(pow(pulse, 4.0), 0.0, 1.0);
-        float dist = length(cellUv);
-        float inside = 1.0 - smoothstep(radius * 0.65, radius, dist);
-        float trail = smoothstep(-0.45, 0.05, cellUv.y) * (1.0 - smoothstep(0.05, 0.72, cellUv.y));
-        trail *= (1.0 - smoothstep(0.0, radius * 1.3, abs(cellUv.x)));
-        vec2 toCenter = normalize(-cellUv + vec2(0.0, 0.035));
-        vec2 refraction = toCenter * dist * dist * amp;
-        float alpha = (inside * 0.95 + trail * 0.35) * shown * (0.35 + 0.65 * pulse);
-        return vec3(refraction * alpha, alpha);
-      }
-
-      void main() {
-        vec2 uv = vUv;
-        vec3 l1 = dropsLayer(uv, 42424.43, 0.028, 10.0, 0.18, 0.13);
-        vec3 l2 = dropsLayer(uv * 1.15 + vec2(0.11, -0.07), 73214.91, 0.041, 13.0, 0.16, 0.11);
-        vec3 l3 = dropsLayer(uv * 0.92 + vec2(-0.08, 0.05), 21341.27, 0.022, 8.0, 0.2, 0.15);
-        vec2 refr = (l1.xy + l2.xy + l3.xy) * uRainAmount;
-        float mask = clamp((l1.z + l2.z + l3.z) * 0.75 * uRainAmount, 0.0, 1.0);
-
-        vec2 bgUv = gl_FragCoord.xy / max(uViewportSize, vec2(1.0));
-        bgUv = clamp(bgUv + refr, vec2(0.001), vec2(0.999));
-        vec4 bg = texture2D(uBackground, bgUv);
-
-        vec3 highlight = vec3(0.82, 0.9, 1.0) * mask * 0.26;
-        vec3 col = bg.rgb + highlight;
-        float alpha = clamp(mask * uOpacity * 0.85, 0.0, 1.0);
-        gl_FragColor = vec4(col, alpha);
-      }
-    `,
+  const geo = new THREE.PlaneGeometry(viewW, viewH);
+  const mat = new THREE.MeshBasicMaterial({
+    map: texture,
     transparent: true,
+    opacity: 0.95 * (core.opacity / 100),
     depthWrite: false,
-    depthTest: false,
-    blending: THREE.NormalBlending,
   });
   const mesh = new THREE.Mesh(geo, mat);
-  mesh.renderOrder = 60;
+  mesh.renderOrder = 5;
   const group = new THREE.Group();
   group.add(mesh);
 
+  const droplets = [];
+  let spawnTimer = 0;
+  let nextIntervalMs = 0;
+
+  function dropletOverlaps(x, y, size) {
+    for (const o of droplets) {
+      const dx = x - o.x;
+      const dy = y - o.y;
+      const minDist = MIN_DROPLET_DIST + (size + o.size) * 0.5;
+      if (dx * dx + dy * dy < minDist * minDist) return true;
+    }
+    return false;
+  }
+
+  function getSpawnInterval() {
+    return 120 + Math.random() * 220;
+  }
+
   return {
     group,
-    setBackgroundTexture(texture) {
-      uniforms.uBackground.value = texture;
-    },
-    setVisible(v) {
-      mesh.visible = !!v;
-    },
     update(delta) {
-      uniforms.uTime.value += delta;
-      const precip = core.effectExtras?.precipitation;
-      const precipNum = typeof precip === 'number' ? precip : parseFloat(precip);
-      if (isFinite(precipNum)) {
-        uniforms.uRainAmount.value = THREE.MathUtils.clamp(0.45 + (precipNum / 22), 0.45, 1.0);
+      const W = dropCanvas.width;
+      const H = dropCanvas.height;
+      const dMs = Math.min(delta * 1000, 50);
+
+      spawnTimer += dMs;
+      if (nextIntervalMs <= 0) nextIntervalMs = getSpawnInterval();
+      if (spawnTimer >= nextIntervalMs) {
+        spawnTimer = Math.max(0, spawnTimer - nextIntervalMs);
+        nextIntervalMs = getSpawnInterval();
+        const size = 3.5 + Math.random() * 10;
+        let x, y;
+        let tries = 16;
+        do {
+          x = Math.random() * W;
+          y = Math.random() * H * 0.9;
+        } while (--tries > 0 && dropletOverlaps(x, y, size));
+        if (tries > 0) {
+          droplets.push({
+            x, y, size,
+            phase: 'appear',
+            opacity: 0,
+            life: 0,
+            appearDur: 140 + Math.random() * 220,
+            restDur: 650 + Math.random() * 1800,
+            slideVel: 10 + Math.random() * 20,
+            slideAccel: 0.7 + Math.random() * 1.2,
+            trailLife: 0,
+          });
+        }
       }
+
+      dropCtx.clearRect(0, 0, W, H);
+
+      for (let i = droplets.length - 1; i >= 0; i--) {
+        const d = droplets[i];
+        d.life += dMs;
+
+        if (d.phase === 'appear') {
+          d.opacity = Math.min(1, (d.life / d.appearDur) * 1.8);
+          if (d.life >= d.appearDur) {
+            d.phase = 'rest';
+            d.life = 0;
+            d.opacity = 1;
+          }
+        } else if (d.phase === 'rest') {
+          if (d.life >= d.restDur) {
+            d.phase = 'slide';
+            d.life = 0;
+          }
+        } else {
+          const dt = dMs / 1000;
+          d.slideVel = (d.slideVel || 8) + d.slideAccel * dt * 60;
+          d.y += d.slideVel * dt;
+          d.trailLife = Math.min(1, (d.trailLife || 0) + dt * 1.5);
+          const frac = d.y / H;
+          d.opacity = frac < 0.85 ? 1 : Math.max(0, (1 - frac) / 0.15);
+          if (d.y > H + d.size * 2) {
+            droplets.splice(i, 1);
+            continue;
+          }
+        }
+
+        if (d.y <= H + d.size * 2) {
+          dropCtx.save();
+          dropCtx.globalAlpha = d.opacity;
+          if (d.phase === 'slide') {
+            const trailLen = d.size * (1.8 + d.slideVel * 0.02) * (0.45 + d.trailLife * 0.55);
+            const trail = dropCtx.createLinearGradient(d.x, d.y - trailLen, d.x, d.y + d.size * 0.3);
+            trail.addColorStop(0, 'rgba(205,220,240,0)');
+            trail.addColorStop(0.4, 'rgba(205,220,240,0.06)');
+            trail.addColorStop(1, 'rgba(215,230,248,0.14)');
+            dropCtx.strokeStyle = trail;
+            dropCtx.lineWidth = Math.max(1, d.size * 0.16);
+            dropCtx.lineCap = 'round';
+            dropCtx.beginPath();
+            dropCtx.moveTo(d.x, d.y - trailLen);
+            dropCtx.lineTo(d.x, d.y + d.size * 0.25);
+            dropCtx.stroke();
+          }
+          const grad = dropCtx.createRadialGradient(
+            d.x - d.size * 0.3, d.y - d.size * 0.3, 0,
+            d.x, d.y, d.size * 1.65
+          );
+          grad.addColorStop(0, 'rgba(238, 247, 255, 0.28)');
+          grad.addColorStop(0.28, 'rgba(214, 230, 248, 0.16)');
+          grad.addColorStop(0.62, 'rgba(184, 203, 225, 0.08)');
+          grad.addColorStop(1, 'rgba(150, 170, 195, 0)');
+          dropCtx.fillStyle = grad;
+          dropCtx.beginPath();
+          dropCtx.ellipse(d.x, d.y, d.size * 0.52, d.size * 1.18, 0, 0, Math.PI * 2);
+          dropCtx.fill();
+          const hl = dropCtx.createRadialGradient(
+            d.x - d.size * 0.25, d.y - d.size * 0.4, 0,
+            d.x - d.size * 0.25, d.y - d.size * 0.4, d.size * 0.6
+          );
+          hl.addColorStop(0, `rgba(255,255,255,${0.22 * d.opacity})`);
+          hl.addColorStop(0.55, `rgba(255,255,255,${0.06 * d.opacity})`);
+          hl.addColorStop(1, 'rgba(255,255,255,0)');
+          dropCtx.fillStyle = hl;
+          dropCtx.beginPath();
+          dropCtx.ellipse(d.x - d.size * 0.23, d.y - d.size * 0.42, d.size * 0.30, d.size * 0.38, 0, 0, Math.PI * 2);
+          dropCtx.fill();
+          dropCtx.restore();
+        }
+      }
+
+      texture.needsUpdate = true;
     },
     setOpacity(v) {
       const dropletsMult = core.effectExtras?.effectOpacity?.droplets ?? 1;
-      uniforms.uOpacity.value = 0.9 * Math.max(0, Math.min(1, v / 100)) * dropletsMult;
-    },
-    onResize(w, h, _isMobile, vw, vh) {
-      viewW = w;
-      viewH = h;
-      viewportW = vw ?? viewportW;
-      viewportH = vh ?? viewportH;
-      geo.dispose();
-      geo = new THREE.PlaneGeometry(viewW, viewH);
-      mesh.geometry = geo;
-      uniforms.uViewSize.value.set(viewW, viewH);
-      uniforms.uViewportSize.value.set(viewportW, viewportH);
+      mat.opacity = 0.95 * Math.max(0, Math.min(1, v / 100)) * dropletsMult;
     },
     dispose() {
       geo.dispose();
       mat.dispose();
+      texture.dispose();
     },
   };
 }
@@ -1351,12 +1261,13 @@ function createSmogOverlay(core) {
   const viewW = core.viewWidth;
   const viewH = core.viewHeight;
   const smogMult = core.effectExtras?.effectOpacity?.smog ?? 1;
-  const geo = new THREE.PlaneGeometry(viewW, viewH);
+  const stripH = Math.max(42, viewH * 0.1);
+  const geo = new THREE.PlaneGeometry(viewW, stripH);
   const uniforms = {
     uTime: { value: 0 },
-    uOpacity: { value: 0.18 * (core.opacity / 100) * smogMult },
-    uScale: { value: 1.4 },
-    uResolution: { value: new THREE.Vector2(viewW, viewH) },
+    uOpacity: { value: 0.11 * (core.opacity / 100) * smogMult },
+    uScale: { value: 2.0 },
+    uResolution: { value: new THREE.Vector2(viewW, stripH) },
   };
   const mat = new THREE.ShaderMaterial({
     uniforms,
@@ -1387,12 +1298,15 @@ function createSmogOverlay(core) {
         vec2 aspect = vec2(uResolution.x / max(uResolution.y, 0.0001), 1.0);
         vec2 uv = (vUv - 0.5) * aspect + 0.5;
         uv *= uScale;
-        uv += vec2(0.015, 0.06) * uTime;
+        uv += vec2(0.01, 0.02) * uTime;
         float d = fbm(uv);
-        d = smoothstep(0.2, 0.65, d);
-        float vMask = smoothstep(0.85, 0.25, vUv.y);
+        float puff = smoothstep(0.72, 0.96, fbm(uv * 0.85 + vec2(uTime * 0.11, -uTime * 0.07)));
+        d = smoothstep(0.28, 0.72, d) * 0.72 + puff * 0.28;
+        float floorMask = smoothstep(1.0, 0.2, vUv.y);
+        float riseMask = 1.0 - smoothstep(0.0, 1.0, vUv.y);
+        float vMask = floorMask * riseMask;
         vec3 color = vec3(0.55, 0.52, 0.48);
-        gl_FragColor = vec4(color, d * vMask * uOpacity);
+        gl_FragColor = vec4(color, clamp(d * vMask * uOpacity, 0.0, 1.0));
       }
     `,
     transparent: true,
@@ -1400,22 +1314,29 @@ function createSmogOverlay(core) {
     blending: THREE.NormalBlending,
   });
   const mesh = new THREE.Mesh(geo, mat);
-  mesh.renderOrder = 100;
+  mesh.position.set(0, -viewH / 2 + stripH / 2, -1);
+  mesh.renderOrder = 10;
   const group = new THREE.Group();
   group.add(mesh);
 
   return {
     group,
-    update(delta, extras) {
-      const speedFactorSmog = getSafeSpeedFactor(extras?.speed_factor_smog ?? core.effectExtras?.speed_factor_smog, 1);
-      uniforms.uTime.value += delta * 0.15 * speedFactorSmog;
+    update(delta) {
+      uniforms.uTime.value += delta * 0.2;
     },
     setOpacity(v) {
       const m = core.effectExtras?.effectOpacity?.smog ?? 1;
-      uniforms.uOpacity.value = 0.18 * Math.max(0, Math.min(1, v / 100)) * m;
+      uniforms.uOpacity.value = 0.11 * Math.max(0, Math.min(1, v / 100)) * m;
+    },
+    onResize(w, h) {
+      const nextStripH = Math.max(42, h * 0.1);
+      mesh.geometry.dispose();
+      mesh.geometry = new THREE.PlaneGeometry(w, nextStripH);
+      mesh.position.y = -h / 2 + nextStripH / 2;
+      uniforms.uResolution.value.set(w, nextStripH);
     },
     dispose() {
-      geo.dispose();
+      mesh.geometry.dispose();
       mat.dispose();
     },
   };
@@ -1468,15 +1389,19 @@ function createAuroraNorthernGradients(core, visibilityScore) {
       }
       void main() {
         vec2 uv = vUv;
-        float n = fbm(uv * 2.5 + uTime * 0.02) * 0.06;
+        float n = fbm(uv * 2.5 + uTime * 0.025) * 0.05;
         float t = fract(uv.x * 0.5 + (1.0 - uv.y) * 0.5 + uTime * 0.01 + n);
         vec3 col = gradient(t);
         vec2 fromTop = uv - vec2(0.5, 1.0);
         float dist = length(fromTop) * 1.6;
         float mask = 1.0 - smoothstep(0.15, 1.0, dist);
         mask = mask * mask;
-        float alpha = mask * uOpacity * (0.94 + 0.06 * fbm(uv * 4.0));
-        gl_FragColor = vec4(col, alpha);
+        float noiseVal = clamp(fbm(uv * 4.0), 0.0, 1.0);
+        float edgeMask = smoothstep(0.2, 0.58, length(uv - vec2(0.5)));
+        float sideMask = smoothstep(0.22, 0.48, abs(uv.x - 0.5));
+        float borderMask = max(edgeMask, sideMask * 0.9);
+        float alpha = clamp(mask * uOpacity * (0.92 + 0.08 * noiseVal) * borderMask, 0.0, 1.0);
+        gl_FragColor = vec4(max(col, vec3(0.0)), alpha);
       }
     `,
     transparent: true,
@@ -1492,7 +1417,7 @@ function createAuroraNorthernGradients(core, visibilityScore) {
   let currentVisibilityScore = visibilityScore || 0.5;
   const applyOpacity = () => {
     const m = core.effectExtras?.effectOpacity?.aurora ?? 1;
-    const base = 0.5 * currentVisibilityScore * Math.max(0, Math.min(1, core.opacity / 100)) * m;
+    const base = 0.22 * currentVisibilityScore * Math.max(0, Math.min(1, core.opacity / 100)) * m;
     uniforms.uOpacity.value = base;
   };
 
@@ -1530,10 +1455,8 @@ function createAuroraOverlay(core, visibilityScore, variant) {
   const viewW = core.viewWidth;
   const viewH = core.viewHeight;
   const auroraMult = core.effectExtras?.effectOpacity?.aurora ?? 1;
-  const bandHeight = 28;
-  const topYBase = viewH / 2 - bandHeight / 2 - 4;
-  const bandYOffset = [ -0.05 * viewH, 0, 0.05 * viewH, 0, 0 ];
-  const bandXOffset = [ -0.2 * viewW, 0, 0.2 * viewW, 0, 0 ];
+  const bandHeight = Math.max(62, viewH * 0.28);
+  const bottomY = -viewH / 2 + bandHeight / 2 - 10;
   const group = new THREE.Group();
 
   const auroraVertexShader = `
@@ -1552,44 +1475,45 @@ function createAuroraOverlay(core, visibilityScore, variant) {
     uniform vec3 uColorB;
     uniform float uSpeed;
     uniform float uPulsePhase;
-    uniform vec2 uResolution;
+    float softColumn(float x, float center, float width) {
+      float d = abs(x - center) / max(width, 0.0001);
+      return exp(-d * d * 2.5);
+    }
+
     void main() {
-      float t = 0.5 + 0.5 * sin(uTime * uSpeed);
+      vec2 uv = vUv;
+      float drift = uTime * (0.014 + uSpeed * 0.006);
+      float c1 = softColumn(fract(uv.x + drift + uPulsePhase * 0.05), 0.18, 0.13);
+      float c2 = softColumn(fract(uv.x + drift * 1.15 + 0.23 + uPulsePhase * 0.07), 0.48, 0.15);
+      float c3 = softColumn(fract(uv.x + drift * 0.9 + 0.51 + uPulsePhase * 0.03), 0.78, 0.14);
+      float curtains = clamp(c1 + c2 + c3, 0.0, 1.0);
+      float yFade = pow(max(0.0, 1.0 - uv.y), 1.7);
+      float edgeFade = smoothstep(0.0, 0.08, uv.x) * smoothstep(0.0, 0.08, 1.0 - uv.x);
+      float radialEdge = smoothstep(0.2, 0.58, length(uv - vec2(0.5)));
+      float sideEdge = smoothstep(0.2, 0.47, abs(uv.x - 0.5));
+      float borderMask = max(radialEdge, sideEdge);
+      float fade = yFade * edgeFade * borderMask;
+      float t = 0.5 + 0.5 * sin((uTime * 0.55) + uv.x * 2.2 + uPulsePhase);
       vec3 col = mix(uColorA, uColorB, t);
-      float fromTop = 1.0 - vUv.y;
-      float fadeTop = smoothstep(0.0, 0.5, fromTop);
-      float fadeBottom = smoothstep(0.0, 0.85, vUv.y);
-      float fade = fadeTop * fadeBottom;
-      float pulse = 0.96 + 0.04 * sin(uTime * 0.8 + uPulsePhase);
-      float alpha = fade * uOpacity * pulse;
-      float edgeBlur = 0.4;
-      float horiz = abs(vUv.x - 0.5) * 2.0;
-      alpha *= 1.0 - smoothstep(1.0 - edgeBlur, 1.0, horiz);
-      gl_FragColor = vec4(col, alpha * 0.82);
+      float pulse = 0.92 + 0.08 * sin(uTime * 0.7 + uPulsePhase);
+      float alpha = clamp(curtains * fade * uOpacity * pulse * 0.72, 0.0, 1.0);
+      gl_FragColor = vec4(col, alpha);
     }
   `;
 
-  const bandPosX = [];
-  const bandVelX = [];
-  for (let i = 0; i < AURORA_BANDS.length; i++) {
-    bandPosX[i] = (Math.random() - 0.5) * 2;
-    bandVelX[i] = (Math.random() - 0.5) * (0.08 / 15.0);
-  }
-
   for (let i = 0; i < AURORA_BANDS.length; i++) {
     const band = AURORA_BANDS[i];
-    const w = viewW * 2.5;
+    const w = viewW * 1.15;
     const h = bandHeight;
     const geo = new THREE.PlaneGeometry(w, h);
     const pulsePhase = (i / AURORA_BANDS.length) * 6.28;
     const uniforms = {
       uTime: { value: 0 },
-      uOpacity: { value: 0.28 * (visibilityScore || 0.5) * (core.opacity / 100) * auroraMult },
+      uOpacity: { value: 0.12 * (visibilityScore || 0.5) * (core.opacity / 100) * auroraMult },
       uColorA: { value: new THREE.Vector3().fromArray(band.colorA) },
       uColorB: { value: new THREE.Vector3().fromArray(band.colorB) },
       uSpeed: { value: band.speed * 0.4 },
       uPulsePhase: { value: pulsePhase },
-      uResolution: { value: new THREE.Vector2(viewW, viewH) },
     };
     const mat = new THREE.ShaderMaterial({
       uniforms,
@@ -1600,19 +1524,17 @@ function createAuroraOverlay(core, visibilityScore, variant) {
       blending: THREE.AdditiveBlending,
     });
     const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(bandXOffset[i] || 0, topYBase + (bandYOffset[i] || 0), -8);
-    mesh.userData.bandIndex = i;
+    mesh.position.set(0, bottomY + i * 2, -8 - i * 0.01);
     mesh.renderOrder = 9;
     group.add(mesh);
   }
 
   let currentVisibilityScore = visibilityScore || 0.5;
   const bandMeshes = group.children;
-  const bounceHalf = Math.max(0.3, (viewW * 0.5 - 60) / core.viewWidth);
 
   const applyOpacity = () => {
     const m = core.effectExtras?.effectOpacity?.aurora ?? 1;
-    const base = 0.28 * currentVisibilityScore * Math.max(0, Math.min(1, core.opacity / 100)) * m;
+    const base = 0.12 * currentVisibilityScore * Math.max(0, Math.min(1, core.opacity / 100)) * m;
     for (const mesh of bandMeshes) {
       mesh.material.uniforms.uOpacity.value = base;
     }
@@ -1621,19 +1543,8 @@ function createAuroraOverlay(core, visibilityScore, variant) {
   return {
     group,
     update(delta) {
-      for (let i = 0; i < bandMeshes.length; i++) {
-        bandMeshes[i].material.uniforms.uTime.value += delta;
-        bandPosX[i] += bandVelX[i] * delta * 60;
-        if (bandPosX[i] >= bounceHalf) {
-          bandPosX[i] = bounceHalf;
-          bandVelX[i] = -Math.abs(bandVelX[i]);
-        } else if (bandPosX[i] <= -bounceHalf) {
-          bandPosX[i] = -bounceHalf;
-          bandVelX[i] = Math.abs(bandVelX[i]);
-        }
-        const px = (bandPosX[i] * (core.viewWidth * 0.5)) + (bandXOffset[i] || 0);
-        bandMeshes[i].position.x = px;
-        bandMeshes[i].position.y = topYBase + (bandYOffset[i] || 0);
+      for (const mesh of bandMeshes) {
+        mesh.material.uniforms.uTime.value += delta;
       }
     },
     setOpacity() {
@@ -1709,27 +1620,10 @@ const fogFragShader = `
     float density = mix(primary, detail, 0.35);
     density = smoothstep(uLow, uHigh, density);
     density = pow(density, uContrast);
-    float vMask = 4.0 * vUv.y * (1.0 - vUv.y);
+    float vMask = 1.0 - smoothstep(0.0, 1.0, vUv.y);
     gl_FragColor = vec4(uColor, density * vMask * uOpacity);
   }
 `;
-
-function createFogOverlay(core) {
-  const intensity = core.effectExtras.fogIntensity ?? 0;
-  const ctx = {
-    viewWidth: core.viewWidth,
-    viewHeight: core.viewHeight,
-    viewportWidth: core.viewportWidth,
-    viewportHeight: core.viewportHeight,
-    isMobile: core.isMobile,
-    effect: 'fog_light',
-    opacity: core.opacity,
-    cloudCoverage: core.effectExtras.cloudCoverage,
-    effectOpacity: core.effectExtras.effectOpacity || {},
-    fogIntensity: intensity,
-  };
-  return createFogEffect(ctx);
-}
 
 function createFogEffect(ctx) {
   const group = new THREE.Group();
@@ -1737,14 +1631,13 @@ function createFogEffect(ctx) {
   const cov = ctx.cloudCoverage;
   const coverageMult = cov != null ? 0.6 + (cov / 100) * 0.5 : 1;
   const fogMult = ctx.effectOpacity?.fog ?? 1;
-  const intensityMult = Math.max(0, Math.min(1, ctx.fogIntensity ?? 1));
   const stripH = Math.min(FOG_STRIP_HEIGHT, ctx.viewHeight * 0.25);
-  const centerY = 0;
+  const bottomY = -ctx.viewHeight / 2 + stripH / 2;
   const layers = settings.layers.map((lc) => {
     const geo = new THREE.PlaneGeometry(ctx.viewWidth, stripH);
     const uniforms = {
       uTime: { value: 0 },
-      uOpacity: { value: settings.baseOpacity * lc.intensity * (ctx.opacity / 100) * coverageMult * fogMult * intensityMult },
+      uOpacity: { value: settings.baseOpacity * lc.intensity * (ctx.opacity / 100) * coverageMult * fogMult },
       uScale: { value: lc.scale },
       uFlow: { value: lc.flow.clone() },
       uResolution: { value: new THREE.Vector2(ctx.viewWidth, ctx.viewHeight) },
@@ -1762,7 +1655,7 @@ function createFogEffect(ctx) {
       blending: THREE.NormalBlending,
     });
     const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(0, centerY, 0);
+    mesh.position.set(0, bottomY, 0);
     mesh.renderOrder = -3;
     group.add(mesh);
     return { mesh, uniforms, config: lc };
@@ -1770,28 +1663,26 @@ function createFogEffect(ctx) {
 
   return {
     group,
-    update(delta, _time, extras) {
-      const speedFactorFog = getSafeSpeedFactor(extras?.speed_factor_fog, 1);
-      layers.forEach((l) => { l.uniforms.uTime.value += delta * l.config.speed * speedFactorFog; });
+    update(delta) {
+      layers.forEach((l) => { l.uniforms.uTime.value += delta * l.config.speed; });
     },
     setOpacity(v) {
       const n = Math.max(0, Math.min(1, v / 100));
       const ms = ctx.isMobile ? 0.75 : 1;
-      const intensityMult = Math.max(0, Math.min(1, ctx.fogIntensity ?? 1));
       layers.forEach((l) => {
-        l.uniforms.uOpacity.value = settings.baseOpacity * l.config.intensity * n * ms * coverageMult * fogMult * intensityMult;
+        l.uniforms.uOpacity.value = settings.baseOpacity * l.config.intensity * n * ms * coverageMult * fogMult;
       });
     },
     onResize(w, h) {
       ctx.viewWidth = w;
       ctx.viewHeight = h;
       const newStripH = Math.min(FOG_STRIP_HEIGHT, h * 0.25);
-      const newCenterY = 0;
+      const newBottomY = -h / 2 + newStripH / 2;
       layers.forEach((l) => {
         l.uniforms.uResolution.value.set(w, h);
         l.mesh.geometry.dispose();
         l.mesh.geometry = new THREE.PlaneGeometry(w, newStripH);
-        l.mesh.position.y = newCenterY;
+        l.mesh.position.y = newBottomY;
       });
     },
     dispose() {
@@ -1827,17 +1718,19 @@ function createSunBeamEffect(ctx) {
       uniform float uUvIndex;
       void main() {
         vec2 uv = vec2((vPosition.x / uViewSize.x) + 0.5, (vPosition.y / uViewSize.y) + 0.5);
-        vec2 dir = uOrigin - uv;
-        float dist = length(dir);
-        float intensity = 1.0 - smoothstep(0.0, 0.75, dist);
-        float alpha = intensity * 0.5 * uOpacity;
+        float dist = length(uv - uOrigin);
+        float core = smoothstep(0.18, 0.0, dist);
+        float halo = smoothstep(0.62, 0.08, dist);
+        float rays = 0.5 + 0.5 * cos(atan(uv.y - uOrigin.y, uv.x - uOrigin.x) * 6.0);
+        float beam = smoothstep(0.9, 0.15, dist) * rays * 0.18;
+        float alpha = clamp((core * 0.55 + halo * 0.35 + beam) * 0.32 * uOpacity, 0.0, 1.0);
         vec3 color;
         if (uUvIndex >= 6.0) {
-          color = mix(vec3(1.0, 0.5, 0.15), vec3(1.0, 0.35, 0.1), dist);
+          color = mix(vec3(1.0, 0.62, 0.2), vec3(1.0, 0.4, 0.12), min(1.0, dist * 1.5));
         } else if (uUvIndex >= 4.0) {
-          color = mix(vec3(1.0, 0.75, 0.35), vec3(1.0, 0.55, 0.2), dist);
+          color = mix(vec3(1.0, 0.82, 0.42), vec3(1.0, 0.62, 0.25), min(1.0, dist * 1.4));
         } else {
-          color = mix(vec3(1.0, 0.95, 0.8), vec3(1.0, 0.85, 0.4), dist);
+          color = mix(vec3(1.0, 0.97, 0.84), vec3(1.0, 0.86, 0.52), min(1.0, dist * 1.4));
         }
         gl_FragColor = vec4(color, alpha);
       }
@@ -1880,7 +1773,7 @@ function createSunBeamEffect(ctx) {
 
 function createCloudEffect(ctx) {
   const group = new THREE.Group();
-  const heightRatio = 0.6;
+  const heightRatio = 0.25;
   const cov = ctx.cloudCoverage;
   const coverageMult = cov != null ? 0.5 + (cov / 100) * 0.5 : 1;
   const cloudsMult = ctx.effectOpacity?.clouds ?? 1;
@@ -1888,7 +1781,7 @@ function createCloudEffect(ctx) {
   let geo = new THREE.PlaneGeometry(ctx.viewWidth, ctx.viewHeight * heightRatio);
   const uniforms = {
     uTime: { value: 0 },
-    uOpacity: { value: (ctx.opacity / 100) * 0.14 * coverageMult * cloudsMult },
+    uOpacity: { value: (ctx.opacity / 100) * 0.1 * coverageMult * cloudsMult },
     uViewSize: { value: new THREE.Vector2(ctx.viewWidth, ctx.viewHeight) },
     uScale: { value: ctx.isMobile ? 1.5 : 1.0 },
   };
@@ -1919,9 +1812,10 @@ function createCloudEffect(ctx) {
       vec2 q = vec2(fbm(uv + vec2(time * 0.5, time * 0.2)), fbm(uv + vec2(1.0)));
       vec2 r = vec2(fbm(uv + q + vec2(1.7, 9.2) + 0.15 * time), fbm(uv + q + vec2(8.3, 2.8) + 0.126 * time));
       float f = fbm(uv + r);
-      float cloud = smoothstep(0.2, 0.7, f);
-      cloud *= smoothstep(0.0, 0.3, vUv.y);
-      cloud *= smoothstep(1.0, 0.8, vUv.y);
+      float cloud = smoothstep(0.36, 0.76, f);
+      cloud *= smoothstep(0.0, 0.18, vUv.y);
+      cloud *= smoothstep(1.0, 0.72, vUv.y);
+      cloud = pow(cloud, 1.25);
       float shadow = smoothstep(0.3, 0.6, fbm(uv * 2.0 + r + vec2(0.5)));
       vec3 color = mix(vec3(0.81, 0.82, 0.89), vec3(1.0), shadow * 0.8 + 0.2);
       gl_FragColor = vec4(color, cloud * uOpacity);
@@ -1936,24 +1830,21 @@ function createCloudEffect(ctx) {
     blending: THREE.NormalBlending,
   });
   const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.set(0, ctx.viewHeight * 0.25, -6);
+  mesh.position.set(0, ctx.viewHeight * 0.375, -6);
   mesh.renderOrder = -2;
   group.add(mesh);
 
   return {
     group,
-    update(delta, _time, extras) {
-      const speedFactorClouds = getSafeSpeedFactor(extras?.speed_factor_clouds, 1);
-      uniforms.uTime.value += delta * speedMult * speedFactorClouds;
-    },
-    setOpacity(v) { uniforms.uOpacity.value = Math.max(0, Math.min(1, v / 100)) * 0.14 * coverageMult * cloudsMult; },
+    update(delta) { uniforms.uTime.value += delta * speedMult; },
+    setOpacity(v) { uniforms.uOpacity.value = Math.max(0, Math.min(1, v / 100)) * 0.1 * coverageMult * cloudsMult; },
     onResize(w, h, isMobile) {
       geo.dispose();
       geo = new THREE.PlaneGeometry(w, h * heightRatio);
       mesh.geometry = geo;
       uniforms.uViewSize.value.set(w, h);
       uniforms.uScale.value = isMobile ? 1.5 : 1.0;
-      mesh.position.set(0, h * 0.25, -6);
+      mesh.position.set(0, h * 0.375, -6);
     },
     dispose() {
       geo.dispose();
@@ -1969,7 +1860,6 @@ function createLightningEffect(ctx) {
     uniform float uFlash;
     uniform vec2 uOrigin;
     uniform float uTime;
-    uniform float uBoltThin;
     float hash(float n) { return fract(sin(n) * 43758.5453); }
     float jaggedLine(vec2 uv, float anchor, float seed) {
       float segments = 8.0;
@@ -1980,7 +1870,6 @@ function createLightningEffect(ctx) {
       float offsetB = hash(seed + idx + 1.0) * 0.24 - 0.12;
       float offset = mix(offsetA, offsetB, smoothstep(0.0, 1.0, frac));
       float width = mix(0.006, 0.02, hash(seed + idx * 1.7));
-      if (uBoltThin > 0.5) width *= 0.28;
       float target = anchor + offset;
       float dist = abs(uv.x - target);
       float intensity = smoothstep(width, 0.0, dist);
@@ -1990,7 +1879,7 @@ function createLightningEffect(ctx) {
     void main() {
       float seed = floor(uTime * 11.0);
       float core = jaggedLine(vUv, uOrigin.x, seed);
-      float halo = uBoltThin > 0.5 ? 0.0 : jaggedLine(vUv, uOrigin.x + 0.008, seed + 2.0) * 0.4;
+      float halo = jaggedLine(vUv, uOrigin.x + 0.008, seed + 2.0) * 0.4;
       float alpha = clamp((core + halo) * uFlash, 0.0, 1.0);
       gl_FragColor = vec4(1.0, 0.98, 0.9, alpha);
     }
@@ -1999,7 +1888,6 @@ function createLightningEffect(ctx) {
     uFlash: { value: 0 },
     uOrigin: { value: new THREE.Vector2(0.85, 1.05) },
     uTime: { value: 0 },
-    uBoltThin: { value: 0 },
   };
   let lightningGeo = new THREE.PlaneGeometry(ctx.viewWidth, ctx.viewHeight);
   const lightningMat = new THREE.ShaderMaterial({
@@ -2030,112 +1918,56 @@ function createLightningEffect(ctx) {
   screenFlashMesh.renderOrder = 30;
   group.add(screenFlashMesh);
 
-  const THUNDER_DELAY_SEC_PER_KM = 2.25;
-  const BURST_SPACING_SEC = 0.08;
-  const SENSOR_QUEUE_COOLDOWN_SEC = 0.8;
-  const MAX_FLASH_QUEUE_SIZE = 24;
+  const LIGHTNING_COOLDOWN_S = 20;
   let lightningTimer = THREE.MathUtils.randFloat(1, 3);
   let flashTimer = 0;
-  const STROBE_DURATION_SEC = 0.14;
-  const flashQueue = [];
-  const normOp = Math.max(0.0001, Math.min(1, ctx.opacity / 100));
+  let flashDuration = 0.25;
+  let cooldownRemain = 0;
+  let scheduledFlashAt = -1;
+  const normOp = Math.max(0, Math.min(1, ctx.opacity / 100));
 
-  const ZIGZAG_DURATION_SEC = 0.02;
-  const ZIGZAG_SPACING_SEC = 0.025;
-  const STRIKE_ZIGZAG_INTENSITY = 2.8;
-  const THUNDER_ZIGZAG_INTENSITY = 1.15;
-  let zigzagTimer = 0;
-  let zigzagIntensity = 1;
-  let lastSensorBurstAt = -Infinity;
-
-  const triggerZigzagOnly = (intensity = 1) => {
-    if (zigzagTimer > 0) return;
-    lightningUniforms.uBoltThin.value = 1;
+  const trigger = () => {
+    flashDuration = THREE.MathUtils.randFloat(0.18, 0.32);
+    flashTimer = flashDuration;
     lightningUniforms.uFlash.value = 1;
     lightningUniforms.uOrigin.value.set(THREE.MathUtils.randFloat(0.6, 0.95), THREE.MathUtils.randFloat(0.85, 1.05));
-    zigzagIntensity = Math.max(0.8, intensity);
-    zigzagTimer = ZIGZAG_DURATION_SEC;
-  };
-
-  const triggerStrobe = (distanceKm) => {
-    const dist = Math.max(0, isFinite(distanceKm) ? distanceKm : 10);
-    const intensity = 1 - Math.min(dist / 50, 0.85);
-    const strobeOpacity = (0.25 + 0.5 * intensity) * normOp + 0.12;
-    lightningUniforms.uBoltThin.value = 0;
-    flashTimer = STROBE_DURATION_SEC;
-    lightningUniforms.uFlash.value = 1;
-    lightningUniforms.uOrigin.value.set(THREE.MathUtils.randFloat(0.6, 0.95), THREE.MathUtils.randFloat(0.85, 1.05));
-    screenFlashMat.opacity = Math.max(screenFlashMat.opacity, strobeOpacity);
-  };
-
-  const queueFlashAt = (triggerAtSec, type, distanceKm) => {
-    if (!isFinite(triggerAtSec)) return;
-    flashQueue.push({ at: triggerAtSec, type: type || 'strobe', distanceKm });
-    flashQueue.sort((a, b) => a.at - b.at);
-    if (flashQueue.length > MAX_FLASH_QUEUE_SIZE) {
-      flashQueue.length = MAX_FLASH_QUEUE_SIZE;
-    }
-  };
-
-  const queueSensorBursts = (strikesToTrigger, distanceKm, nowSec) => {
-    const strikeCount = Math.max(1, Math.min(2, Math.floor(strikesToTrigger || 0)));
-    const safeDistanceKm = Math.max(0, isFinite(distanceKm) ? distanceKm : 0);
-    const thunderDelaySec = safeDistanceKm * THUNDER_DELAY_SEC_PER_KM;
-    // First hit must be very short and single, otherwise it looks like "dancing current".
-    queueFlashAt(nowSec, 'zigzag-strike');
-    for (let i = 0; i < strikeCount; i++) {
-      const t = nowSec + thunderDelaySec + i * BURST_SPACING_SEC;
-      queueFlashAt(t, 'thunder-zigzag');
-      queueFlashAt(t + ZIGZAG_SPACING_SEC, 'strobe', safeDistanceKm);
-    }
+    screenFlashMat.opacity = Math.max(screenFlashMat.opacity, 0.55 * normOp + 0.15);
   };
 
   return {
     group,
     update(delta, time, extras) {
       const ld = extras?.lightningData;
-      const speedFac = getSafeSpeedFactor(extras?.speed_factor_lightning, 1);
+      const speedFac = (typeof extras?.speed_factor_lightning === 'number') ? extras.speed_factor_lightning : 1;
 
-      if (ld?.strikesToTrigger > 0 && (time - lastSensorBurstAt) >= SENSOR_QUEUE_COOLDOWN_SEC) {
-        lastSensorBurstAt = time;
-        queueSensorBursts(ld.strikesToTrigger, ld.distanceKm, time);
-      }
-
-      while (flashQueue.length && flashQueue[0].at <= time) {
-        const entry = flashQueue.shift();
-        if (entry.type === 'zigzag-strike') triggerZigzagOnly(STRIKE_ZIGZAG_INTENSITY);
-        else if (entry.type === 'thunder-zigzag') triggerZigzagOnly(THUNDER_ZIGZAG_INTENSITY);
-        else triggerStrobe(entry.distanceKm);
-      }
-
-      const hasSensorDrivenLightning = Boolean(ld && (ld.strikesToTrigger > 0 || ld.distanceKm > 0));
-      if (!hasSensorDrivenLightning && flashQueue.length === 0) {
+      if (ld && (ld.strikesToTrigger > 0 || ld.distanceKm > 0)) {
+        if (ld.strikesToTrigger > 0 && cooldownRemain <= 0) {
+          const thunderDelay = ld.distanceKm * 3;
+          scheduledFlashAt = time + thunderDelay;
+          cooldownRemain = LIGHTNING_COOLDOWN_S;
+        }
+        if (scheduledFlashAt > 0 && time >= scheduledFlashAt) {
+          scheduledFlashAt = -1;
+          trigger();
+        }
+        cooldownRemain = Math.max(0, cooldownRemain - delta * speedFac);
+      } else {
         lightningTimer -= delta * speedFac;
         if (lightningTimer <= 0) {
           lightningTimer = THREE.MathUtils.randFloat(1.5, 4);
-          triggerStrobe(ld?.distanceKm ?? 15);
+          trigger();
         }
       }
 
       lightningUniforms.uTime.value += delta;
-      if (zigzagTimer > 0) {
-        zigzagTimer -= delta;
-        const nt = Math.max(0, zigzagTimer / ZIGZAG_DURATION_SEC);
-        lightningUniforms.uFlash.value = Math.min(1, nt * normOp * zigzagIntensity);
-        lightningUniforms.uBoltThin.value = 1;
-        if (zigzagTimer <= 0) {
-          lightningUniforms.uBoltThin.value = 0;
-          zigzagIntensity = 1;
-        }
-      } else if (flashTimer > 0) {
-        lightningUniforms.uBoltThin.value = 0;
+      if (flashTimer > 0) {
         flashTimer -= delta;
-        const nt = Math.max(0, flashTimer / STROBE_DURATION_SEC);
-        lightningUniforms.uFlash.value = Math.pow(nt, 1.3) * normOp;
+        const nt = Math.max(0, flashTimer / Math.max(flashDuration, 0.001));
+        lightningUniforms.uFlash.value = Math.pow(nt, 1.4) * normOp;
       } else if (lightningUniforms.uFlash.value > 0) {
-        lightningUniforms.uFlash.value = Math.max(0, lightningUniforms.uFlash.value - delta * 10);
+        lightningUniforms.uFlash.value = Math.max(0, lightningUniforms.uFlash.value - delta * 8);
       }
-      screenFlashMat.opacity = Math.max(0, screenFlashMat.opacity - delta * 8);
+      screenFlashMat.opacity = Math.max(0, screenFlashMat.opacity - delta * 6);
     },
     setOpacity(v) {
       const n = Math.max(0, Math.min(1, v / 100));
@@ -2241,9 +2073,8 @@ function createHailEffect(ctx) {
 
   return {
     group,
-    update(delta, _time, extras) {
-      const speedFactorHail = getSafeSpeedFactor(extras?.speed_factor_hail, 1);
-      uniforms.uTime.value += delta * speedFactorHail;
+    update(delta) {
+      uniforms.uTime.value += delta;
       uniforms.uViewSize.value.set(ctx.viewWidth, ctx.viewHeight);
     },
     setOpacity(v) {

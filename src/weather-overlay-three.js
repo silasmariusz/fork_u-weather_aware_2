@@ -135,7 +135,6 @@ function getEffectiveDpr() {
 
 function isSmogAlertActive() {
   const cfg = window.ForkUWeatherAwareConfig || {};
-  if (cfg.development_mode && cfg.debug_smog_override === true) return true;
   const pm25Id = cfg.pm25_entity;
   const pm4Id = cfg.pm4_entity;
   const pm10Id = cfg.pm10_entity;
@@ -248,7 +247,9 @@ function getLightningData() {
     distanceKm = cfg.debug_lightning_distance != null && cfg.debug_lightning_distance !== ''
       ? parseFloat(cfg.debug_lightning_distance) || 0
       : 5;
-    if (lastLightningCount < 0) lastLightningCount = count; // init so first frame does not trigger a flash
+    if (cfg.debug_lightning_counter != null && cfg.debug_lightning_counter !== '') {
+      lastLightningCount = count;
+    }
   } else if (ha?.hass?.states) {
     const counterId = cfg.lightning_counter_entity;
     const distId = cfg.lightning_distance_entity;
@@ -299,56 +300,6 @@ function getCloudCoverage() {
   return null;
 }
 
-function getHumidity() {
-  const cfg = window.ForkUWeatherAwareConfig || {};
-  const ha = getHomeAssistant();
-  const WEATHER_ENTITY = getWeatherEntityId();
-  if (cfg.development_mode && cfg.debug_humidity != null && String(cfg.debug_humidity).trim() !== '') {
-    const v = parseFloat(cfg.debug_humidity);
-    if (!isNaN(v)) return Math.max(0, Math.min(100, v));
-  }
-  if (!ha?.hass) return null;
-  if (cfg.humidity_entity) {
-    const e = ha.hass.states[cfg.humidity_entity];
-    if (e?.state && e.state !== 'unavailable' && e.state !== 'unknown') {
-      const v = parseFloat(e.state);
-      if (!isNaN(v)) return Math.max(0, Math.min(100, v));
-    }
-  }
-  const we = ha.hass.states[WEATHER_ENTITY];
-  if (we?.attributes?.humidity != null) {
-    const v = parseFloat(we.attributes.humidity);
-    if (!isNaN(v)) return Math.max(0, Math.min(100, v));
-  }
-  return null;
-}
-
-/** 0..1: estimated fog from humidity + cloud coverage + PM2.5 (no weather entity check). */
-function getEstimatedFogScore() {
-  const humidity = getHumidity();
-  const cloudCoverage = getCloudCoverage();
-  const cfg = window.ForkUWeatherAwareConfig || {};
-  const ha = getHomeAssistant();
-  const thresh25 = cfg.smog_threshold_pm25 ?? 35;
-  let pm25Norm = 0;
-  if (cfg.pm25_entity && ha?.hass?.states) {
-    const e = ha.hass.states[cfg.pm25_entity];
-    if (e?.state !== 'unavailable' && e?.state !== 'unknown') {
-      const v = parseFloat(e.state);
-      if (!isNaN(v) && v > 0) pm25Norm = Math.min(1, v / Math.max(thresh25, 1));
-    }
-  }
-  const h = humidity != null ? humidity / 100 : 0.5;
-  const c = cloudCoverage != null ? cloudCoverage / 100 : 0.5;
-  const humidityWeightRaw = parseFloat(cfg.humidity_fog_weight);
-  const humidityWeight = isNaN(humidityWeightRaw) ? 0.35 : Math.max(0, Math.min(1, humidityWeightRaw));
-  const remainingWeight = 1 - humidityWeight;
-  const cloudWeight = remainingWeight * (0.4 / 0.65);
-  const pmWeight = remainingWeight * (0.25 / 0.65);
-  const score = humidityWeight * h + cloudWeight * c + pmWeight * pm25Norm;
-  return Math.max(0, Math.min(1, score));
-}
-
 function getPrecipitationMultiplier() {
   const cfg = window.ForkUWeatherAwareConfig || {};
   const ha = getHomeAssistant();
@@ -372,6 +323,24 @@ function getPrecipitationMultiplier() {
   const v = parseFloat(precip);
   if (isNaN(v)) return 1;
   return Math.max(0.2, Math.min(1.5, 0.2 + (v / 10)));
+}
+
+function getPrecipitationAmountMm() {
+  const cfg = window.ForkUWeatherAwareConfig || {};
+  const ha = getHomeAssistant();
+  if (!ha?.hass) return 0;
+  if (cfg.precipitation_entity) {
+    const e = ha.hass.states[cfg.precipitation_entity];
+    if (e?.state !== 'unavailable' && e?.state !== 'unknown') {
+      const v = parseFloat(e.state);
+      if (!isNaN(v)) return Math.max(0, v);
+    }
+  }
+  const we = ha.hass.states[getWeatherEntityId()];
+  if (!we?.attributes) return 0;
+  const precip = we.attributes.precipitation ?? we.attributes.precipitation_1h ?? we.attributes.precipitation_probability;
+  const v = parseFloat(precip);
+  return isNaN(v) ? 0 : Math.max(0, v);
 }
 
 function getAuroraChance() {
@@ -531,30 +500,20 @@ function getWindData() {
   return { speed, bearing };
 }
 
-function parseSpeedFactor(rawValue, fallback = 1) {
-  const parsed = parseFloat(rawValue);
-  if (isNaN(parsed)) return fallback;
-  return Math.max(0.1, Math.min(3, parsed));
-}
-
-function getSpeedFactors(cfg = {}) {
-  return {
-    speed_factor_rain: parseSpeedFactor(cfg.speed_factor_rain, 1),
-    speed_factor_snow: parseSpeedFactor(cfg.speed_factor_snow, 1),
-    speed_factor_clouds: parseSpeedFactor(cfg.speed_factor_clouds, 1),
-    speed_factor_fog: parseSpeedFactor(cfg.speed_factor_fog, 1),
-    speed_factor_smog: parseSpeedFactor(cfg.speed_factor_smog, 1),
-    speed_factor_hail: parseSpeedFactor(cfg.speed_factor_hail, 1),
-    speed_factor_lightning: parseSpeedFactor(cfg.speed_factor_lightning, 1),
-    speed_factor_stars: parseSpeedFactor(cfg.speed_factor_stars, 1),
-    speed_factor_matrix: parseSpeedFactor(cfg.speed_factor_matrix, 1),
-  };
-}
-
 function getSpatialZIndex() {
   const mode = (window.ForkUWeatherAwareConfig || {}).spatial_mode || 'foreground';
   const z = { foreground: 9998, background: -1, bubble: 3, 'gradient-mask': 9997 }[mode];
   return z ?? 9998;
+}
+
+function getOverlayHostElement() {
+  const ha = document.querySelector('home-assistant');
+  const main = ha?.shadowRoot?.querySelector('home-assistant-main');
+  const appLayout = main?.shadowRoot?.querySelector('ha-app-layout');
+  const panelResolver = appLayout?.querySelector('partial-panel-resolver');
+  const panelLovelace = panelResolver?.shadowRoot?.querySelector('ha-panel-lovelace');
+  const huiRoot = panelLovelace?.shadowRoot?.querySelector('hui-root');
+  return huiRoot || panelLovelace || panelResolver || appLayout || document.body;
 }
 
 function filterEffectByConfig(effect) {
@@ -590,9 +549,9 @@ function applySpatialStyle() {
   container.style.setProperty('--weather-overlay-z', String(getSpatialZIndex()));
 }
 
-function updateWeather(force = false) {
+function updateWeather() {
   const now = Date.now();
-  if (!force && now - lastUpdateTime < 1000) return;
+  if (now - lastUpdateTime < 1000) return;
 
   const enabled = isOverlayEnabled();
   const onDashboard = isOnEnabledDashboard();
@@ -622,12 +581,16 @@ function updateWeather(force = false) {
     log('Weather:', newWeather, '→ Effect:', effect);
   }
 
-  const smogActive = isEffectEnabled('enable_smog_effect') && isSmogAlertActive();
+  const smogActive = effect !== 'stars' && isEffectEnabled('enable_smog_effect') && isSmogAlertActive();
   const moonPosition = effect === 'stars' && isEffectEnabled('enable_moon_glow') ? getMoonPosition() : null;
   const auroraVisibilityScore = effect === 'stars' ? getAuroraVisibilityScore() : 0;
-  const auroraOverlay = effect === 'stars' && auroraVisibilityScore > 0;
+  const auroraOverlay = effect === 'stars' && auroraVisibilityScore >= 0.65;
   const rainEffects = ['rain', 'rain_storm', 'rain_drizzle', 'snow_storm'];
-  const windowDroplets = rainEffects.includes(effect) && isEffectEnabled('enable_window_droplets');
+  const precipitationMm = getPrecipitationAmountMm();
+  const windowDroplets =
+    rainEffects.includes(effect) &&
+    isEffectEnabled('enable_window_droplets') &&
+    precipitationMm > 2;
   const spatialMode = (window.ForkUWeatherAwareConfig || {}).spatial_mode || 'foreground';
   const { speed: windSpeedKmh, bearing: windBearing } = getWindData();
   const windSwayFactor = (cfg.wind_sway_factor != null && !isNaN(parseFloat(cfg.wind_sway_factor)))
@@ -639,19 +602,11 @@ function updateWeather(force = false) {
   const lightningData = (effect === 'lightning' || effect === 'rain_storm') ? getLightningData() : null;
   const lightningOverlay = effect === 'rain_storm' ? lightningData : null;
   const sunPosition = effect === 'sun_beams' ? getSunPosition() : null;
-  const speedFactors = getSpeedFactors(cfg);
+  const speedFactorLightning = (cfg.speed_factor_lightning != null && !isNaN(parseFloat(cfg.speed_factor_lightning)))
+    ? parseFloat(cfg.speed_factor_lightning) : 1;
   const cloudCoverage = getCloudCoverage();
   const precipitationMultiplier = getPrecipitationMultiplier();
   const themeMode = getThemeMode();
-  const weatherSaysFog = currentWeather === 'fog' || currentWeather === 'foggy';
-  const estimatedFogScore = getEstimatedFogScore();
-  let fogIntensity = weatherSaysFog
-    ? 1
-    : (estimatedFogScore > 0.25 ? Math.max(0.25, Math.min(0.85, estimatedFogScore)) : 0);
-  if (cfg.development_mode && cfg.debug_fog_intensity != null && String(cfg.debug_fog_intensity).trim() !== '') {
-    const v = parseFloat(cfg.debug_fog_intensity);
-    if (!isNaN(v)) fogIntensity = Math.max(0, Math.min(1, v));
-  }
   const cloudSpeedMult = (cfg.cloud_speed_multiplier != null && !isNaN(parseFloat(cfg.cloud_speed_multiplier)))
     ? Math.max(0.1, Math.min(3, parseFloat(cfg.cloud_speed_multiplier))) : 1;
   const effectOpacity = {
@@ -679,18 +634,14 @@ function updateWeather(force = false) {
       lightningData,
       lightningOverlay,
       sunPosition,
-      ...speedFactors,
+      speed_factor_lightning: speedFactorLightning,
       cloudCoverage,
       precipitationMultiplier,
       themeMode,
       cloudSpeedMultiplier: cloudSpeedMult,
-      fogIntensity,
       auroraOverlay,
       auroraVisibilityScore,
       auroraVariant: (window.ForkUWeatherAwareConfig || {}).aurora_variant || 'bands',
-      moonTextureUrl: (window.ForkUWeatherAwareConfig || {}).moon_texture_url || null,
-      moonNormalUrl: (window.ForkUWeatherAwareConfig || {}).moon_normal_url || null,
-      moonOpacityMax: (window.ForkUWeatherAwareConfig || {}).moon_opacity_max ?? 0.5,
     });
   }
 }
@@ -720,7 +671,7 @@ function init() {
   container.style.cssText =
     'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:var(--weather-overlay-z,9998);';
   applySpatialStyle();
-  document.body.appendChild(container);
+  getOverlayHostElement().appendChild(container);
 
   try {
     engine = new WeatherEffectsEngine(container, {
@@ -736,12 +687,16 @@ function init() {
       const weather = getWeatherState();
       const effect = filterEffectByConfig(mapWeatherStateToEffect(weather));
       currentWeather = weather;
-    const smogActive = isEffectEnabled('enable_smog_effect') && isSmogAlertActive();
+    const smogActive = effect !== 'stars' && isEffectEnabled('enable_smog_effect') && isSmogAlertActive();
     const moonPosition = effect === 'stars' && isEffectEnabled('enable_moon_glow') ? getMoonPosition() : null;
     const auroraVisibilityScore = effect === 'stars' ? getAuroraVisibilityScore() : 0;
-    const auroraOverlay = effect === 'stars' && auroraVisibilityScore > 0;
+    const auroraOverlay = effect === 'stars' && auroraVisibilityScore >= 0.65;
     const rainEffects = ['rain', 'rain_storm', 'rain_drizzle', 'snow_storm'];
-    const windowDroplets = rainEffects.includes(effect) && isEffectEnabled('enable_window_droplets');
+    const precipitationMm = getPrecipitationAmountMm();
+    const windowDroplets =
+      rainEffects.includes(effect) &&
+      isEffectEnabled('enable_window_droplets') &&
+      precipitationMm > 2;
     const spatialMode = (window.ForkUWeatherAwareConfig || {}).spatial_mode || 'foreground';
     const { speed: windSpeedKmh, bearing: windBearing } = getWindData();
     const initCfg = window.ForkUWeatherAwareConfig || {};
@@ -751,7 +706,6 @@ function init() {
       ? parseFloat(initCfg.rain_max_tilt_deg) : 30;
     const rainWindMinKmh = (initCfg.rain_wind_min_kmh != null && !isNaN(parseFloat(initCfg.rain_wind_min_kmh)))
       ? parseFloat(initCfg.rain_wind_min_kmh) : 3;
-    const initSpeedFactors = getSpeedFactors(initCfg);
     const initLightning = (effect === 'lightning' || effect === 'rain_storm') ? getLightningData() : null;
     const initSun = effect === 'sun_beams' ? getSunPosition() : null;
     const initEffectOpacity = {
@@ -778,16 +732,13 @@ function init() {
       lightningData: initLightning,
       lightningOverlay: effect === 'rain_storm' ? initLightning : null,
       sunPosition: initSun,
-      ...initSpeedFactors,
+      speed_factor_lightning: (initCfg.speed_factor_lightning != null && !isNaN(parseFloat(initCfg.speed_factor_lightning))) ? parseFloat(initCfg.speed_factor_lightning) : 1,
       cloudCoverage: getCloudCoverage(),
       precipitationMultiplier: getPrecipitationMultiplier(),
       themeMode: getThemeMode(),
       cloudSpeedMultiplier: (initCfg.cloud_speed_multiplier != null && !isNaN(parseFloat(initCfg.cloud_speed_multiplier))) ? Math.max(0.1, Math.min(3, parseFloat(initCfg.cloud_speed_multiplier))) : 1,
       auroraOverlay: effect === 'stars' && getAuroraVisibilityScore() > 0,
       auroraVisibilityScore: effect === 'stars' ? getAuroraVisibilityScore() : 0,
-      moonTextureUrl: (window.ForkUWeatherAwareConfig || {}).moon_texture_url || null,
-      moonNormalUrl: (window.ForkUWeatherAwareConfig || {}).moon_normal_url || null,
-      moonOpacityMax: (window.ForkUWeatherAwareConfig || {}).moon_opacity_max ?? 0.5,
       auroraVariant: (window.ForkUWeatherAwareConfig || {}).aurora_variant || 'bands',
     });
   }
@@ -799,7 +750,7 @@ function init() {
 
   setInterval(updateWeather, 1000);
   window.addEventListener('resize', handleResize);
-  window.addEventListener('fork-u-weather-force-update', () => { lastUpdateTime = 0; updateWeather(true); });
+  window.addEventListener('fork-u-weather-force-update', () => { lastUpdateTime = 0; updateWeather(); });
 
   setInterval(() => {
     if (window.location.pathname !== lastPath) {
