@@ -1000,10 +1000,10 @@ function createStarsEffect(ctx) {
         void main() {
           vec2 c = vUv - 0.5;
           float d = length(c) * 2.0;
-          if (d > 1.0) discard;
           float core = smoothstep(0.34, 0.0, d);
           float halo = smoothstep(1.0, 0.12, d);
-          float alpha = (core * 0.78 + halo * 0.22) * uOpacity;
+          float edgeFade = smoothstep(1.15, 0.65, d);
+          float alpha = (core * 0.78 + halo * 0.22) * edgeFade * uOpacity;
           gl_FragColor = vec4(0.96, 0.97, 1.0, alpha);
         }
       `,
@@ -1037,7 +1037,7 @@ function createStarsEffect(ctx) {
         uniform vec2 uCenter;
         void main() {
           float d = length(vUv - uCenter);
-          float glow = smoothstep(0.9, 0.05, d);
+          float glow = smoothstep(0.95, 0.02, d);
           float alpha = glow * glow * uOpacity;
           gl_FragColor = vec4(0.82, 0.86, 0.96, alpha);
         }
@@ -1722,8 +1722,9 @@ function createSunBeamEffect(ctx) {
         float core = smoothstep(0.18, 0.0, dist);
         float halo = smoothstep(0.62, 0.08, dist);
         float rays = 0.5 + 0.5 * cos(atan(uv.y - uOrigin.y, uv.x - uOrigin.x) * 6.0);
-        float beam = smoothstep(0.9, 0.15, dist) * rays * 0.18;
-        float alpha = clamp((core * 0.55 + halo * 0.35 + beam) * 0.32 * uOpacity, 0.0, 1.0);
+        float beam = smoothstep(0.95, 0.08, dist) * rays * 0.18;
+        float outerFade = smoothstep(0.98, 0.25, dist);
+        float alpha = clamp((core * 0.55 + halo * 0.35 + beam) * 0.32 * uOpacity * outerFade, 0.0, 0.98);
         vec3 color;
         if (uUvIndex >= 6.0) {
           color = mix(vec3(1.0, 0.62, 0.2), vec3(1.0, 0.4, 0.12), min(1.0, dist * 1.5));

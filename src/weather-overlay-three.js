@@ -612,7 +612,7 @@ function updateWeather() {
   const effectOpacity = {
     moon: Math.max(0, Math.min(1, (cfg.opacity_moon ?? 100) / 100)),
     clouds: Math.max(0, Math.min(1, (cfg.opacity_clouds ?? 100) / 100)),
-    aurora: Math.max(0, Math.min(1, (cfg.opacity_aurora ?? 100) / 100)),
+    aurora: Math.max(0, Math.min(2, (cfg.opacity_aurora ?? 100) / 100)),
     stars: Math.max(0, Math.min(1, (cfg.opacity_stars ?? 100) / 100)),
     droplets: Math.max(0, Math.min(1, (cfg.opacity_droplets ?? 100) / 100)),
     sun: Math.max(0, Math.min(1, (cfg.opacity_sun ?? 100) / 100)),
@@ -711,7 +711,7 @@ function init() {
     const initEffectOpacity = {
       moon: Math.max(0, Math.min(1, (initCfg.opacity_moon ?? 100) / 100)),
       clouds: Math.max(0, Math.min(1, (initCfg.opacity_clouds ?? 100) / 100)),
-      aurora: Math.max(0, Math.min(1, (initCfg.opacity_aurora ?? 100) / 100)),
+      aurora: Math.max(0, Math.min(2, (initCfg.opacity_aurora ?? 100) / 100)),
       stars: Math.max(0, Math.min(1, (initCfg.opacity_stars ?? 100) / 100)),
       droplets: Math.max(0, Math.min(1, (initCfg.opacity_droplets ?? 100) / 100)),
       sun: Math.max(0, Math.min(1, (initCfg.opacity_sun ?? 100) / 100)),

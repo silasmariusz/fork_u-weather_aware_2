@@ -259,6 +259,13 @@ function updateDebugFromControls() {
   });
 
   if (variant?.value) updates.aurora_variant = variant.value;
+
+  const opacityAuroraEl = document.getElementById('opacity-aurora');
+  const opacityAuroraVal = parseFloat(opacityAuroraEl?.value || '100');
+  updates.opacity_aurora = !isNaN(opacityAuroraVal)
+    ? Math.max(0, Math.min(200, opacityAuroraVal))
+    : 100;
+
   setCfg(updates);
 }
 
@@ -314,6 +321,7 @@ function init() {
   setControlValue('humidity-fog-weight', cfg.humidity_fog_weight ?? 0.35);
   setControlValue('debug-aurora', cfg.debug_aurora_score ?? '');
   setControlValue('aurora-variant', cfg.aurora_variant || 'bands');
+  setControlValue('opacity-aurora', cfg.opacity_aurora ?? 100);
   SPEED_FACTOR_CONTROLS.forEach(({ id, key }) => {
     setControlValue(id, clampSpeedFactor(cfg[key], 1));
   });
@@ -337,6 +345,7 @@ function init() {
   document.getElementById('humidity-fog-weight')?.addEventListener('input', refreshOnChange);
   document.getElementById('debug-aurora')?.addEventListener('input', refreshOnChange);
   document.getElementById('aurora-variant')?.addEventListener('change', refreshOnChange);
+  document.getElementById('opacity-aurora')?.addEventListener('input', refreshOnChange);
   SPEED_FACTOR_CONTROLS.forEach(({ id }) => {
     document.getElementById(id)?.addEventListener('input', refreshOnChange);
   });

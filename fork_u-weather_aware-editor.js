@@ -401,7 +401,7 @@
             </div>
             <div class="form-row">
               <label>Weather entity</label>
-              <input id="weather_entity" type="text" class="entity-select" list="weather_entity_list" value="${cfg.weather_entity || ''}" placeholder="np. weather.openweathermap">
+              <input id="weather_entity" type="text" class="entity-select" list="weather_entity_list" value="${cfg.weather_entity || ''}" placeholder="e.g. weather.openweathermap">
               <datalist id="weather_entity_list">
                 ${weatherOpts.map(o => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join('')}
               </datalist>
@@ -584,12 +584,12 @@
             <div class="form-row">
               <label><input type="checkbox" id="enable_window_droplets" ${cfg.enable_window_droplets !== false ? 'checked' : ''}> Window droplets (side rain on glass)</label>
             </div>
-            <div class="section-title" style="margin-top:12px">Effect opacity (0–100, default 100)</div>
+            <div class="section-title" style="margin-top:12px">Effect opacity (0–100, default 100; Aurora 0–200 for boost)</div>
             <div class="form-row">
-              <label>Moon</label><input type="number" id="opacity_moon" value="${cfg.opacity_moon ?? 100}" min="0" max="100" style="width:52px">
-              <label>Clouds</label><input type="number" id="opacity_clouds" value="${cfg.opacity_clouds ?? 100}" min="0" max="100" style="width:52px">
-              <label>Aurora</label><input type="number" id="opacity_aurora" value="${cfg.opacity_aurora ?? 100}" min="0" max="100" style="width:52px">
-              <label>Stars</label><input type="number" id="opacity_stars" value="${cfg.opacity_stars ?? 100}" min="0" max="100" style="width:52px">
+              <label>Moon</label><input type="number" id="opacity_moon" value="${cfg.opacity_moon ?? 100}" min="0" max="100" style="width:52px" title="Moon glow opacity (0–100%)">
+              <label>Clouds</label><input type="number" id="opacity_clouds" value="${cfg.opacity_clouds ?? 100}" min="0" max="100" style="width:52px" title="Cloud opacity (0–100%)">
+              <label>Aurora</label><input type="number" id="opacity_aurora" value="${cfg.opacity_aurora ?? 100}" min="0" max="200" style="width:52px" title="Aurora intensity (0–200%, 100=default, 150–200=boost)">
+              <label>Stars</label><input type="number" id="opacity_stars" value="${cfg.opacity_stars ?? 100}" min="0" max="100" style="width:52px" title="Stars opacity (0–100%)">
               <label>Droplets</label><input type="number" id="opacity_droplets" value="${cfg.opacity_droplets ?? 100}" min="0" max="100" style="width:52px">
               <label>Sun</label><input type="number" id="opacity_sun" value="${cfg.opacity_sun ?? 100}" min="0" max="100" style="width:52px">
               <label>Fog</label><input type="number" id="opacity_fog" value="${cfg.opacity_fog ?? 100}" min="0" max="100" style="width:52px">
@@ -920,7 +920,7 @@
           stars_require_moon: !!root.getElementById('stars_require_moon')?.checked,
           opacity_moon: Math.max(0, Math.min(100, parseFloat(root.getElementById('opacity_moon')?.value || '100') || 100)),
           opacity_clouds: Math.max(0, Math.min(100, parseFloat(root.getElementById('opacity_clouds')?.value || '100') || 100)),
-          opacity_aurora: Math.max(0, Math.min(100, parseFloat(root.getElementById('opacity_aurora')?.value || '100') || 100)),
+          opacity_aurora: Math.max(0, Math.min(200, parseFloat(root.getElementById('opacity_aurora')?.value || '100') || 100)),
           opacity_stars: Math.max(0, Math.min(100, parseFloat(root.getElementById('opacity_stars')?.value || '100') || 100)),
           opacity_droplets: Math.max(0, Math.min(100, parseFloat(root.getElementById('opacity_droplets')?.value || '100') || 100)),
           opacity_sun: Math.max(0, Math.min(100, parseFloat(root.getElementById('opacity_sun')?.value || '100') || 100)),
