@@ -189,6 +189,7 @@ export class WeatherEffectsCore {
     this.disposeAuroraOverlay();
     this.disposeActiveEffect();
     this.currentEffect = 'none';
+    this.clearCanvasToTransparent();
     this.stopLoop();
     this.lastAppliedExtras = {};
   }
@@ -346,6 +347,14 @@ export class WeatherEffectsCore {
     }
   }
 
+  /** Clear canvas to fully transparent – prevents frozen last frame when effect ends */
+  clearCanvasToTransparent() {
+    if (!this.renderer || !this.canvas) return;
+    this.renderer.setRenderTarget(null);
+    this.renderer.setClearColor(0x000000, 0);
+    this.renderer.clear(true, true, true);
+  }
+
   renderFrame(timestamp) {
     if (this.lastTimestamp === 0) this.lastTimestamp = timestamp;
     const delta = Math.min((timestamp - this.lastTimestamp) / 1000, 0.05);
@@ -413,11 +422,13 @@ export class WeatherEffectsCore {
     this.disposeActiveEffect();
     this.currentEffect = effect;
     if (effect === 'none') {
+      this.clearCanvasToTransparent();
       this.stopLoop();
       return;
     }
     const instance = this.createEffectInstance(effect);
     if (!instance) {
+      this.clearCanvasToTransparent();
       this.stopLoop();
       this.currentEffect = 'none';
       return;
