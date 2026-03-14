@@ -1,0 +1,78 @@
+# Creates a GitHub release and tag from a version trigger file.
+# Triggered when .release-trigger is pushed to any branch.
+name: Create Release
+
+on:
+  push:
+    paths:
+      - '.release-trigger'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag to create (e.g. v3.0.0)'
+        required: true
+        default: 'v3.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            VER=$(node -e "process.stdout.write(require('./package.json').version)")
+            echo "tag=v${VER}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Read release notes
+        id: notes
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          VERSION="${TAG#v}"
+          NOTES_FILE="RELEASE_v${VERSION}.md"
+          if [ -f "$NOTES_FILE" ]; then
+            BODY=$(cat "$NOTES_FILE")
+          else
+            BODY="Release $TAG"
+          fi
+          # Write to file to avoid quoting issues
+          echo "$BODY" > /tmp/release_notes.txt
+          echo "notes_file=/tmp/release_notes.txt" >> $GITHUB_OUTPUT
+
+      - name: Create tag and release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          SHA="${{ github.sha }}"
+
+          # Create annotated tag via API
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Check if tag already exists
+          if git ls-remote --tags origin "$TAG" | grep -q "$TAG"; then
+            echo "Tag $TAG already exists, skipping tag creation"
+          else
+            git tag -a "$TAG" -m "Release $TAG" "$SHA"
+            git push origin "$TAG"
+            echo "Tag $TAG created and pushed"
+          fi
+
+          # Create GitHub release
+          gh release create "$TAG" \
+            --title "Release $TAG" \
+            --notes-file "${{ steps.notes.outputs.notes_file }}" \
+            --target "${{ github.ref_name }}" \
+            || echo "Release may already exist"
