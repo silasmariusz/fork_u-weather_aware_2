@@ -994,11 +994,14 @@ function createStarsEffect(ctx) {
   group.add(points);
 
   let moonMesh = null;
-  let moonEdgeGlowMesh = null;
   if (moonPos && typeof moonPos.x === 'number' && typeof moonPos.y === 'number') {
     const mx = (moonPos.x - 0.5) * ctx.viewWidth;
     const my = (0.5 - moonPos.y) * ctx.viewHeight;
-    const moonSize = Math.max(ctx.viewWidth, ctx.viewHeight) * 0.12;
+    const MOON_AVG_DIST_KM = 384400;
+    const distanceFactor = moonPos.distanceKm && moonPos.distanceKm > 0
+      ? Math.max(0.85, Math.min(1.2, MOON_AVG_DIST_KM / moonPos.distanceKm))
+      : 1.0;
+    const moonSize = Math.max(ctx.viewWidth, ctx.viewHeight) * 0.12 * distanceFactor;
     const moonGeo = new THREE.PlaneGeometry(moonSize, moonSize);
     const moonMat = new THREE.ShaderMaterial({
       uniforms: {
@@ -1026,41 +1029,6 @@ function createStarsEffect(ctx) {
     moonMesh.position.set(mx, my, -1);
     moonMesh.renderOrder = 1;
     group.add(moonMesh);
-
-    const edgeGeo = new THREE.PlaneGeometry(ctx.viewWidth, ctx.viewHeight);
-    const edgeCenter = { x: moonPos.x, y: moonPos.y };
-    if (edgeCenter.y <= edgeCenter.x && edgeCenter.y <= (1 - edgeCenter.x)) {
-      edgeCenter.y = -0.16;
-    } else if (edgeCenter.x < 0.5) {
-      edgeCenter.x = -0.15;
-    } else {
-      edgeCenter.x = 1.15;
-    }
-    const edgeMat = new THREE.ShaderMaterial({
-      uniforms: {
-        uOpacity: { value: 0.1 * (ctx.opacity / 100) * moonMult },
-        uCenter: { value: new THREE.Vector2(edgeCenter.x, edgeCenter.y) },
-      },
-      vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-      fragmentShader: `
-        varying vec2 vUv;
-        uniform float uOpacity;
-        uniform vec2 uCenter;
-        void main() {
-          float d = length(vUv - uCenter);
-          float glow = smoothstep(0.95, 0.02, d);
-          float alpha = glow * glow * uOpacity;
-          gl_FragColor = vec4(0.82, 0.86, 0.96, alpha);
-        }
-      `,
-      transparent: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    });
-    moonEdgeGlowMesh = new THREE.Mesh(edgeGeo, edgeMat);
-    moonEdgeGlowMesh.position.set(0, 0, -1.8);
-    moonEdgeGlowMesh.renderOrder = 0;
-    group.add(moonEdgeGlowMesh);
   }
 
   let twinkleTime = 0;
@@ -1075,7 +1043,6 @@ function createStarsEffect(ctx) {
       const n = Math.max(0, Math.min(1, v / 100));
       mat.opacity = 0.92 * n * starsMult;
       if (moonMesh) moonMesh.material.uniforms.uOpacity.value = 0.18 * n * moonMult;
-      if (moonEdgeGlowMesh) moonEdgeGlowMesh.material.uniforms.uOpacity.value = 0.1 * n * moonMult;
       nightGlowMat.uniforms.uOpacity.value = 0.16 * n;
     },
     onResize(w, h) {
@@ -1093,10 +1060,6 @@ function createStarsEffect(ctx) {
       if (moonMesh) {
         moonMesh.geometry.dispose();
         moonMesh.material.dispose();
-      }
-      if (moonEdgeGlowMesh) {
-        moonEdgeGlowMesh.geometry.dispose();
-        moonEdgeGlowMesh.material.dispose();
       }
     },
   };
@@ -1298,7 +1261,7 @@ function createSmogOverlay(core) {
       }
       float fbm(vec2 p) {
         float v = 0.0, amp = 0.5;
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < 3; i++) {
           v += amp * noise(p);
           p *= 2.0;
           amp *= 0.5;
@@ -1614,7 +1577,7 @@ const fogFragShader = `
   }
   float fbm(vec2 p) {
     float v = 0.0, amp = 0.5;
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 3; i++) {
       v += amp * noise(p);
       p *= 2.0;
       amp *= 0.5;
@@ -1811,7 +1774,7 @@ function createCloudEffect(ctx) {
     }
     float fbm(vec2 p) {
       float v = 0.0, amp = 0.5, freq = 1.0;
-      for (int i = 0; i < 6; i++) {
+      for (int i = 0; i < 4; i++) {
         v += amp * noise(p * freq);
         amp *= 0.5;
         freq *= 2.0;
@@ -1822,13 +1785,12 @@ function createCloudEffect(ctx) {
       vec2 uv = vUv * uScale;
       float time = uTime * 0.05;
       vec2 q = vec2(fbm(uv + vec2(time * 0.5, time * 0.2)), fbm(uv + vec2(1.0)));
-      vec2 r = vec2(fbm(uv + q + vec2(1.7, 9.2) + 0.15 * time), fbm(uv + q + vec2(8.3, 2.8) + 0.126 * time));
-      float f = fbm(uv + r);
+      float f = fbm(uv + q * 0.6 + vec2(0.15 * time));
       float cloud = smoothstep(0.36, 0.76, f);
       cloud *= smoothstep(0.0, 0.18, vUv.y);
       cloud *= smoothstep(1.0, 0.72, vUv.y);
       cloud = pow(cloud, 1.25);
-      float shadow = smoothstep(0.3, 0.6, fbm(uv * 2.0 + r + vec2(0.5)));
+      float shadow = smoothstep(0.3, 0.6, fbm(uv * 2.0 + q + vec2(0.5)));
       vec3 color = mix(vec3(0.81, 0.82, 0.89), vec3(1.0), shadow * 0.8 + 0.2);
       gl_FragColor = vec4(color, cloud * uOpacity);
     }

@@ -60,7 +60,6 @@ const DEFAULT_OVERLAY_CONFIG = {
   enable_lightning_effect: true,
   enable_matrix: true,
   enable_window_droplets: true,
-  stars_require_moon: false,
   mobile_limit_dpr: true,
   mobile_reduce_particles: true,
   mobile_snowy2_light: true,
