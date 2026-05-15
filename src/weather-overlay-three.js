@@ -591,8 +591,39 @@ function updateWeather() {
 
   const smogActive = effect !== 'stars' && isEffectEnabled('enable_smog_effect') && isSmogAlertActive();
   const moonPosition = effect === 'stars' && isEffectEnabled('enable_moon_glow') ? getMoonPosition() : null;
-  const auroraVisibilityScore = effect === 'stars' ? getAuroraVisibilityScore() : 0;
-  const auroraOverlay = effect === 'stars' && auroraVisibilityScore > 0;
+
+  
+  let auroraVisibilityScore = 0;
+  let auroraOverlay = false;
+  
+  if (effect === 'stars') {
+      try {
+          const kIndex = getKIndex();
+          const calculatedScore = getAuroraVisibilityScore();
+          
+          // Pobieramy próg z konfiguracji (domyślnie 0.15)
+          const cfg = window.ForkUWeatherAwareConfig || {};
+          const minScore = (cfg.aurora_visibility_min != null && !isNaN(parseFloat(cfg.aurora_visibility_min))) 
+              ? parseFloat(cfg.aurora_visibility_min) 
+              : 0.15;
+  
+          // Warunek użytkownika: (K-index >= 4) LUB (wyliczony score spełnia próg)
+          const isHighKIndex = kIndex != null && kIndex >= 4;
+          const isHighScore = calculatedScore > 0 && calculatedScore >= minScore;
+  
+          if (isHighKIndex || isHighScore) {
+              auroraOverlay = true;
+              // Jeśli zorza odpala się wyłącznie przez wysoki K-Index, dajemy jej domyślną siłę wizualną (np. 0.8), żeby nie była czarna
+              auroraVisibilityScore = isHighScore ? calculatedScore : 0.8; 
+          }
+      } catch (err) {
+          // Jeśli jakikolwiek sensor rzuci błędem, łapiemy to. 
+          // Zorza się nie narysuje, ale GWIAZDY I KSIĘŻYC BĘDĄ BEZPIECZNE.
+          console.warn('[Weather Overlay] Błąd odczytów sensorów zorzy, pomijam nakładkę:', err);
+      }
+  }
+
+  
   const rainEffects = ['rain', 'rain_storm', 'rain_drizzle', 'snow_storm'];
   const precipitationMm = getPrecipitationAmountMm();
   const windowDroplets =
