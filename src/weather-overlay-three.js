@@ -592,7 +592,7 @@ function updateWeather() {
   const smogActive = effect !== 'stars' && isEffectEnabled('enable_smog_effect') && isSmogAlertActive();
   const moonPosition = effect === 'stars' && isEffectEnabled('enable_moon_glow') ? getMoonPosition() : null;
   const auroraVisibilityScore = effect === 'stars' ? getAuroraVisibilityScore() : 0;
-  const auroraOverlay = effect === 'stars' && auroraVisibilityScore >= 0.65;
+  const auroraOverlay = effect === 'stars' && auroraVisibilityScore > 0;
   const rainEffects = ['rain', 'rain_storm', 'rain_drizzle', 'snow_storm'];
   const precipitationMm = getPrecipitationAmountMm();
   const windowDroplets =
